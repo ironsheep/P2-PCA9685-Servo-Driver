@@ -1,0 +1,13 @@
+{
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/CVS": true,
+        "**/.DS_Store": true,
+        "**/*.p2asm": true,
+        "**/*.binary": true
+    },
+    "topLevel": "mpu9dof_demo",
+    "explorerExclude.backup": null
+}
