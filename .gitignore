@@ -13,6 +13,7 @@ __pycache__/
 *.p2asm
 *.binary
 .history/
+src/HOLD/
 
 # Distribution / packaging
 .Python
