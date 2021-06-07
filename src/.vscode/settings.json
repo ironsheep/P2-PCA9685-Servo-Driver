@@ -8,6 +8,6 @@
         "**/*.p2asm": true,
         "**/*.binary": true
     },
-    "topLevel": "mpu9dof_demo",
+    "topLevel": "arm6axis_demo",
     "explorerExclude.backup": null
 }

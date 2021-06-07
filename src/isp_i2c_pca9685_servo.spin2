@@ -1,0 +1,159 @@
+'' =================================================================================================
+''
+''   File....... isp_i2c_pca9685_servo.spin2
+''   Purpose.... Servo Interface to underlying PCA9685 I2C Controller
+''   Authors.... Stephen M Moraco
+''               -- Copyright (c) 2021 Iron Sheep Productions, LLC
+''               -- see below for terms of use
+''   E-mail..... stephen@ironsheep.biz
+''   Started.... Jun 2021
+''   Updated.... 06 Jun 2021
+''
+'' =================================================================================================
+
+con
+
+    #0, M_ANGLE, M_USECS                                          ' write/read modes
+    #0, ST_NOT_SET, ST_STANDARD, ST_360_DEGREE                    ' Servo Types (limit behaviors)
+
+    CALCULATE_CENTER = -1
+
+    DEFAULT_LIMIT_USEC_MIN = 600
+    DEFAULT_LIMIT_USEC_MAX = 2400
+    DEFAULT_LIMIT_USEC_CTR = 1500
+
+var
+
+    LONG    channel                                                 ' servo controller channel [0-15]
+    LONG    servoType                                                ' 600..2400
+    LONG    uSecPosn                                                ' 600..2400
+    LONG    degrPosn                                                ' 0..180
+    LONG    uSecMinimum                                                ' 600..2400
+    LONG    uSecCenter                                               ' 600..2400
+    LONG    uSecMaximum                                                ' 600..2400
+
+    BYTE    bChannelSpecified                                       ' true when servo-channel is set up
+    BYTE    bStopped
+    BYTE    bHaveLimits                                             ' true when limits are specified
+
+OBJ
+
+    pca9685     : "isp_i2c_pca9685"                     ' our 16-chan servo controller
+    term        : "jm_serial_singleton"                 ' debug terminal output
+
+pub null()
+
+'' This is not a top-level object
+
+
+pub start(chan, degr) | channel
+
+'' Configure servo output channel
+'' -- deg is position in degrees (0 to 180)
+    setServoDefaults()
+    channel := 0 #> chan <# 15                                  ' save controller channel for this servo
+    degrPosn := 0 #> degr <# 180                                      ' keep legal
+    uSecPosn := angle2us(degrPosn)                                  ' convert to uSecs
+    term.fstr2(string("+ start(CH%d, %d degr)\r\n"), chan, degr)
+    startx(channel, uSecPosn)                                            ' start servo
+
+pub startx(chan, uSecs) | x
+'' Configure servo output channel
+'' -- uSecs is position in microseconds (600 to 2400)
+    stop()                                                      ' clear old pin
+    setServoDefaults()
+
+    channel := 0 #> chan <# 15                                  ' save controller channel for this servo
+    uSecPosn := uSecMinimum #> uSecs <# uSecMaximum             ' keep position legal
+    degrPosn := us2Angle(uSecPosn)                              ' convert to degrPosn
+    term.fstr2(string("+ startx(CH%d, %d uS)\r\n"), chan, uSecs)
+    pca9685.gotoMicroSec(channel, uSecPosn)                     ' servo output
+    bChannelSpecified := TRUE                                   ' mark servo channel as specified
+
+
+pub stop()
+    '' Disable servo channel if previously configured
+    if (bChannelSpecified)
+        longfill(@uSecPosn, 0, 3)                                      ' mark disabled
+
+pub configureMinCtrMaxType(uSecMin, uSecCntr, uSecMax, type)
+    '' Configure limits and center for this servo instance
+    servoType := type
+    uSecMinimum := uSecMin
+    uSecMaximum := uSecMax
+    uSecCenter := uSecCntr
+    if(uSecCntr == CALCULATE_CENTER)
+        uSecCenter := ((uSecMaximum - uSecMinimum) / 2) + uSecMinimum
+    bHaveLimits := TRUE
+
+PUB centerMicroSec() : centerInMicroSecs
+    ' return the current center in uSec value
+    centerInMicroSecs := uSecCenter
+
+pub write(mode, value)
+    '' Update servo
+    '' -- {mode} is 0 for degrees, 1 for microseconds
+    '' -- {value} is new degrPosn or position in uSec
+    if (bChannelSpecified)
+        if (mode == M_ANGLE)
+            degrPosn := 0 #> value <# 180                                   ' legal degrees
+            uSecPosn := angle2us(degrPosn)                                  ' convert to uSecs
+        elseif (mode == M_USECS)
+            uSecPosn := uSecMinimum #> value <# uSecMaximum                 ' legal microseconds
+            degrPosn := us2Angle(uSecPosn)                                  ' convert to degrPosn
+        pca9685.gotoMicroSec(channel, uSecPosn)                             ' update servo
+
+pub read(mode) : result
+    '' return the current servo value in {mode} units
+    result := 0
+    if (bChannelSpecified)
+        if (mode == M_ANGLE)
+            result := degrPosn
+        else
+            result := uSecPosn
+
+PRI setServoDefaults()
+    ' configure default values for this servo if we don't yet have these
+    if not bHaveLimits
+        uSecMinimum := DEFAULT_LIMIT_USEC_MIN
+        uSecMaximum := DEFAULT_LIMIT_USEC_MAX
+        uSecCenter := DEFAULT_LIMIT_USEC_CTR
+        servoType := ST_STANDARD
+        bHaveLimits := TRUE
+
+PRI angle2us(degr) : uSecs | validDegr
+    ' convert degrees to uSecs
+    validDegr := 0 #> degr <# 180                           ' legal degrees
+    ' map our number of degrees to uSec time
+    uSecs := map(validDegr, 0, 180, uSecMinimum, uSecMaximum)
+
+PRI us2Angle(uSecs) : degrPosn | validUs
+    ' convert uSecs to degrees
+    validUs := uSecMinimum #> uSecs <# uSecMaximum          ' legal microseconds
+    ' map our uSec time to number of degrees
+    degrPosn := map(validUs, uSecMinimum, uSecMaximum, 0, 180)
+
+PRI map(inValue,  inMin,  inMax,  outMin,  outMax) : outValue
+{
+    Re-maps a number from one range to another. That is, a value of fromLow would get mapped to toLow,
+    a value of fromHigh to toHigh, values in-between to values in-between, etc.
+
+    Does not constrain values to within the range, because out-of-range values are sometimes intended and
+    useful. The constrain() function may be used either before or after this function, if limits to the ranges are desired.
+
+    Note that the "lower bounds" of either range may be larger or smaller than the "upper bounds" so the
+    map() function may be used to reverse a range of numbers, for example
+
+    y = map(x, 1, 50, 50, 1);
+
+    The function also handles negative numbers well, so that this example
+
+    y = map(x, 1, 50, 50, -100);
+
+    is also valid and works well.
+
+    The map() function uses integer math so will not generate fractions, when the math might indicate that
+    it should do so. Fractional remainders are truncated, and are not rounded or averaged.
+}
+  outValue := (inValue - inMin) * (outMax - outMin) / (inMax - inMin) + outMin
+}

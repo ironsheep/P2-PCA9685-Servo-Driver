@@ -9,6 +9,11 @@ __pycache__/
 # macOS stuff
 .DS_Store
 
+# flexspin stuff
+*.p2asm
+*.binary
+.history/
+
 # Distribution / packaging
 .Python
 build/

@@ -1,0 +1,109 @@
+'' =================================================================================================
+''
+''   File....... isp_arm_6axis.spin2
+''   Purpose.... Methods for moving our 6-axis arm
+''   Authors.... Stephen M Moraco
+''               -- Copyright (c) 2021 Iron Sheep Productions, LLC
+''               -- see below for terms of use
+''   E-mail..... stephen@ironsheep.biz
+''   Started.... Jun 2021
+''   Updated.... 06 Jun 2021
+''
+'' =================================================================================================
+
+CON { arm specifics }
+
+MAX_SERVOS = 8
+
+' which servos are on which PWM channels?
+#0, CHAN_SERVO_BASE, CHAN_SERVO_SHOULDER, CHAN_SERVO_ELBOW
+#4, CHAN_SERVO_WRIST_FLEX, CHAN_SERVO_WRIST_ROTATE, CHAN_SERVO_GRIP
+
+CHAN_SERVO_TEST_15 = 15
+CHAN_SERVO_TEST_12 = 12
+
+' servo object indexes
+#0, SERVO_BASE, SERVO_SHOULDER, SERVO_ELBOW
+#3, SERVO_WRIST_FLEX, SERVO_WRIST_ROTATE, SERVO_GRIP
+#6, SERVO_TEST_12, SERVO_TEST_15
+
+HOME_SERVO_BASE = 90
+HOME_SERVO_SHOULDER = 90
+HOME_SERVO_ELBOW = 90
+HOME_SERVO_WRIST_FLEX = 90
+HOME_SERVO_WRIST_ROTATE = 90
+HOME_SERVO_GRIP = 90
+
+DEFAULT_SERVO_MAX = 2200
+DEFAULT_SERVO_CENTER = 1500
+DEFAULT_SERVO_MIN = 800
+
+
+DEFAULT_GRIP_SERVO_MAX = 1722
+DEFAULT_GRIP_SERVO_CENTER = 1500
+DEFAULT_GRIP_SERVO_MIN = 1110
+
+OBJ { our objects }
+
+    servos[MAX_SERVOS]  : "isp_i2c_pca9685_servo"               ' our six servos
+    term                : "jm_serial_singleton"                 ' terminal output
+
+pub null()
+
+'' This is not a top-level object
+
+pub start() : ok
+    ' configure controller then home all arm servos
+    term.fstr0(string("+ start() ENTRY\r\n"))
+    servos[SERVO_TEST_12].start(CHAN_SERVO_TEST_12, HOME_SERVO_BASE)
+    servos[SERVO_TEST_15].start(CHAN_SERVO_TEST_15, HOME_SERVO_BASE)
+
+{{
+    servos[SERVO_BASE].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_360_DEGREE)
+    servos[SERVO_BASE].start(CHAN_SERVO_BASE, HOME_SERVO_BASE)
+
+    servos[SERVO_SHOULDER].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
+    servos[SERVO_SHOULDER].start(CHAN_SERVO_SHOULDER, HOME_SERVO_SHOULDER)
+
+    servos[SERVO_ELBOW].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
+    servos[SERVO_ELBOW].start(CHAN_SERVO_ELBOW, HOME_SERVO_ELBOW)
+
+    servos[SERVO_WRIST_FLEX].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
+    servos[SERVO_WRIST_FLEX].start(CHAN_SERVO_WRIST_FLEX, HOME_SERVO_WRIST_FLEX)
+
+    servos[SERVO_WRIST_ROTATE].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
+    servos[SERVO_WRIST_ROTATE].start(CHAN_SERVO_WRIST_ROTATE, HOME_SERVO_WRIST_ROTATE)
+
+    servos[SERVO_GRIP].configureMinCtrMaxType(DEFAULT_GRIP_SERVO_MIN, servos.CALCULATE_CENTER, DEFAULT_GRIP_SERVO_MAX, servos.ST_STANDARD)
+    servos[SERVO_GRIP].startx(CHAN_SERVO_GRIP, servos[SERVO_GRIP].centerMicroSec())
+'}}
+
+    term.fstr0(string("+ start() EXIT\r\n"))
+
+CON { license }
+
+{{
+ -------------------------------------------------------------------------------------------------
+  MIT License
+
+  Copyright (c) 2021 Iron Sheep Productions, LLC
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+ =================================================================================================
+}}
