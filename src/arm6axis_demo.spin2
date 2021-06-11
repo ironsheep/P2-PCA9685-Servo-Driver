@@ -73,6 +73,7 @@ PUB main() | statusOK, index
     quietController() ' set pins to output low... so we can set LA trigger
     wait_for_terminal(false)
 
+    pwmController.enableOutput(TRUE)
     term.fstr0(string("\r\nAccess PCA9685 16-chan PWM ...\r\n\r\n"))
 
     term.fstr0(string("initController()\r\n"))
@@ -80,28 +81,26 @@ PUB main() | statusOK, index
     if statusOK
         term.fstr0(string("demo()\r\n"))
         resetServoController(statusOK)
-        demo(0)
+        demo()
 
     waitms(30000)
+    pwmController.enableOutput(FALSE)
     tearDown()  ' stop any cogs, if needed
     term.fstr0(string("\r\nDone\r\n"))
 
 
-PUB demo(loopCt) | loopIndex
-    if loopCt <= 0
-        loopCt := 1
+PUB demo() | loopIndex
 
     pwmController.enableDebug(TRUE)
     arm.start()
-
-    repeat  ' don't let us stop this run
+    'arm.doServoSteps()
 
 PRI quietController()
 
     pwmController.enableDebug(TRUE)
 
     term.fstr0(string("Quiesce... <<  start the LA!  >>\r\n"))
-    pwmController.init(PCA9685_SCL, PCA9685_SDA)  ' set pins to output low... so we can set LA trigger
+    pwmController.init(PCA9685_SCL, PCA9685_SDA, PCA9685_OE)  ' set pins to output low... so we can set LA trigger
 
 
 PRI initController() : ok | deviceFound
@@ -109,7 +108,7 @@ PRI initController() : ok | deviceFound
     pwmController.enableDebug(TRUE)
 
     term.fstr0(string("Setup...\r\n"))
-    deviceFound := pwmController.start(PCA9685_SCL, PCA9685_SDA)                                           ' i2c @ 100kHz, no pull-ups
+    deviceFound := pwmController.start(PCA9685_SCL, PCA9685_SDA, PCA9685_OE)                                           ' i2c @ 100kHz, no pull-ups
 
     term.fstr0(string("ID device address...\r\n"))
     deviceFound := pwmController.deviceID()
@@ -125,7 +124,7 @@ PRI initController() : ok | deviceFound
 
 PRI resetServoController(ok)
     if(ok)
-        pwmController.configDefault()
+        pwmController.configureController()
 
 PRI setup()
     ' start anything that needs to be

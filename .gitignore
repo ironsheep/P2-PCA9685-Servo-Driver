@@ -12,8 +12,13 @@ __pycache__/
 # flexspin stuff
 *.p2asm
 *.binary
+
+# VSCode stuff
 .history/
 src/HOLD/
+
+# archives
+*.gz
 
 # Distribution / packaging
 .Python

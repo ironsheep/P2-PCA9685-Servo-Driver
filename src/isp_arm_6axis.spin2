@@ -34,6 +34,9 @@ HOME_SERVO_WRIST_FLEX = 90
 HOME_SERVO_WRIST_ROTATE = 90
 HOME_SERVO_GRIP = 90
 
+HOME_SERVO_TEST_12 = 90
+HOME_SERVO_TEST_15 = 150
+
 DEFAULT_SERVO_MAX = 2200
 DEFAULT_SERVO_CENTER = 1500
 DEFAULT_SERVO_MIN = 800
@@ -52,13 +55,13 @@ pub null()
 
 '' This is not a top-level object
 
-pub start() : ok
+pub start() : ok | angle
     ' configure controller then home all arm servos
-    term.fstr0(string("+ start() ENTRY\r\n"))
-    servos[SERVO_TEST_12].start(CHAN_SERVO_TEST_12, HOME_SERVO_BASE)
-    servos[SERVO_TEST_15].start(CHAN_SERVO_TEST_15, HOME_SERVO_BASE)
+    term.fstr0(string("- start() ENTRY\r\n"))
+    'servos[SERVO_TEST_12].start(CHAN_SERVO_TEST_12, HOME_SERVO_TEST_12)
+    servos[SERVO_TEST_15].start(CHAN_SERVO_TEST_15, HOME_SERVO_TEST_15)
 
-{{
+{
     servos[SERVO_BASE].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_360_DEGREE)
     servos[SERVO_BASE].start(CHAN_SERVO_BASE, HOME_SERVO_BASE)
 
@@ -76,9 +79,49 @@ pub start() : ok
 
     servos[SERVO_GRIP].configureMinCtrMaxType(DEFAULT_GRIP_SERVO_MIN, servos.CALCULATE_CENTER, DEFAULT_GRIP_SERVO_MAX, servos.ST_STANDARD)
     servos[SERVO_GRIP].startx(CHAN_SERVO_GRIP, servos[SERVO_GRIP].centerMicroSec())
-'}}
+'}
+    term.fstr0(string("- start() EXIT\r\n"))
 
-    term.fstr0(string("+ start() EXIT\r\n"))
+    term.fstr0(string("- doServoSteps() ENTRY\r\n"))
+    'repeat  ' just stall here
+
+    repeat
+        servos[SERVO_TEST_15].write(servos.M_USECS, 800)
+        waitms(1000)
+        servos[SERVO_TEST_15].write(servos.M_USECS, 1500)
+        waitms(1000)
+        servos[SERVO_TEST_15].write(servos.M_USECS, 2200)
+        waitms(1000)
+
+
+
+    repeat
+        repeat angle from 0 to 180 step 20
+            waitms(500)
+            servos[SERVO_TEST_15].write(servos.M_ANGLE, angle)
+            waitms(200)
+
+        waitms(1000)
+        servos[SERVO_TEST_15].write(servos.M_ANGLE, 0)
+
+    term.fstr0(string("- doServoSteps() EXIT\r\n"))
+
+PUB doServoSteps() | angle
+    ' for( int angle =0; angle<181; angle +=20) {
+    '    delay(500);
+    '    pwm.setPWM(0, 0, angleToPulse(angle)
+    ' };
+    term.fstr0(string("- doServoSteps() ENTRY\r\n"))
+    repeat
+        repeat angle from 0 to 180 step 20
+            waitms(500)
+            servos[SERVO_TEST_15].write(servos.M_ANGLE, angle)
+        waitms(1000)
+
+    term.fstr0(string("- doServoSteps() EXIT\r\n"))
+
+
+
 
 CON { license }
 

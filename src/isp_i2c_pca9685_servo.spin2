@@ -94,6 +94,7 @@ pub write(mode, value)
     '' Update servo
     '' -- {mode} is 0 for degrees, 1 for microseconds
     '' -- {value} is new degrPosn or position in uSec
+    term.fstr2(string("+ write(MODE %d, %d degr/uS)\r\n"), mode, value)
     if (bChannelSpecified)
         if (mode == M_ANGLE)
             degrPosn := 0 #> value <# 180                                   ' legal degrees
@@ -102,6 +103,8 @@ pub write(mode, value)
             uSecPosn := uSecMinimum #> value <# uSecMaximum                 ' legal microseconds
             degrPosn := us2Angle(uSecPosn)                                  ' convert to degrPosn
         pca9685.gotoMicroSec(channel, uSecPosn)                             ' update servo
+    else
+        term.fstr0(string("+ write(-, -) ERROR CHANNEL NOT configured\r\n"))
 
 pub read(mode) : result
     '' return the current servo value in {mode} units
@@ -135,6 +138,8 @@ PRI us2Angle(uSecs) : degrPosn | validUs
 
 PRI map(inValue,  inMin,  inMax,  outMin,  outMax) : outValue
 {
+    REF: https://www.arduino.cc/reference/en/language/functions/math/map
+
     Re-maps a number from one range to another. That is, a value of fromLow would get mapped to toLow,
     a value of fromHigh to toHigh, values in-between to values in-between, etc.
 
@@ -156,4 +161,3 @@ PRI map(inValue,  inMin,  inMax,  outMin,  outMax) : outValue
     it should do so. Fractional remainders are truncated, and are not rounded or averaged.
 }
   outValue := (inValue - inMin) * (outMax - outMin) / (inMax - inMin) + outMin
-}
