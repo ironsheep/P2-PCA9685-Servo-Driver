@@ -28,7 +28,7 @@ CHAN_SERVO_TEST_12 = 12
 #6, SERVO_TEST_12, SERVO_TEST_15
 
 HOME_SERVO_BASE = 90
-HOME_SERVO_SHOULDER = 90
+HOME_SERVO_SHOULDER = 110
 HOME_SERVO_ELBOW = 90
 HOME_SERVO_WRIST_FLEX = 90
 HOME_SERVO_WRIST_ROTATE = 90
@@ -57,10 +57,11 @@ pub null()
 pub start() : ok | angle
     ' configure controller then home all arm servos
     term.fstr0(string("- start() ENTRY\r\n"))
-    'servos[SERVO_TEST_12].start(CHAN_SERVO_TEST_12, HOME_SERVO_TEST_12)
 
     ' -----------------------------------------------------------------
     ' calibrate clock... pulse width
+    {
+    'servos[SERVO_TEST_12].start(CHAN_SERVO_TEST_12, HOME_SERVO_TEST_12)
     servos[SERVO_TEST_15].start(CHAN_SERVO_TEST_15, HOME_SERVO_TEST_15)
     waitms(8000)
     servos[SERVO_TEST_15].write(servos.M_ANGLE, 0)
@@ -73,6 +74,7 @@ pub start() : ok | angle
     servos[SERVO_TEST_15].write(servos.M_USECS, 2200)
 
     repeat
+    '}
     ' -----------------------------------------------------------------
 
     servos[SERVO_BASE].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_360_DEGREE)
@@ -98,6 +100,7 @@ pub start() : ok | angle
     term.fstr0(string("- doServoSteps() ENTRY\r\n"))
     'repeat  ' just stall here
 
+{
     repeat
         servos[SERVO_TEST_15].write(servos.M_USECS, 900)
         waitms(1000)
@@ -105,7 +108,6 @@ pub start() : ok | angle
         waitms(1000)
         servos[SERVO_TEST_15].write(servos.M_USECS, 2200)
         waitms(1000)
-
 
 
     repeat
@@ -118,6 +120,7 @@ pub start() : ok | angle
         servos[SERVO_TEST_15].write(servos.M_ANGLE, 0)
 
     term.fstr0(string("- doServoSteps() EXIT\r\n"))
+'}
 
 PUB doServoSteps() | angle
     ' for( int angle =0; angle<181; angle +=20) {
