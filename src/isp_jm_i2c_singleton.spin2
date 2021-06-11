@@ -61,38 +61,39 @@ DAT
     ' for debug dumps
     bytes   WORD    0[MAX_LOG_ENTRIES]
     count   WORD    0
+    bShowDebug  BYTE    FALSE
 
 pub null()
 
 '' This is not a top-level object
 PRI record(mode, value)
-
-    if count < MAX_LOG_ENTRIES - 1
-        WORD [@bytes][count] := (mode & $ff) << 8 | (value & $ff)
-        count++
+    if bShowDebug
+        if count < MAX_LOG_ENTRIES - 1
+            WORD [@bytes][count] := (mode & $ff) << 8 | (value & $ff)
+            count++
 
 PRI report() | bytIndex, mode, value
-
-    if count > 0
-        repeat bytIndex from 0 to count - 1
-            mode := WORD [@bytes][bytIndex] >> 8
-            value := WORD [@bytes][bytIndex] & $ff
-            case mode
-                MK_START:
-                    term.fstr0(string("  start()\r\n"))
-                MK_WRITE:
-                    term.fstr1(string("  write(0x%.02x)\r\n"), value)
-                MK_READ:
-                    term.fstr1(string("  read(0x%.02x)\r\n"), value)
-                MK_STOP:
-                    term.fstr0(string("  stop()\r\n"))
-                MK_SCL:
-                    term.fstr1(string("  SCL=%d\r\n"), value)
-                MK_SDA:
-                    term.fstr1(string("  SDA=%d\r\n"), value)
-                other:
-                    term.fstr0(string("  {unknown??}}\r\n"))
-        count := 0
+    if bShowDebug
+        if count > 0
+            repeat bytIndex from 0 to count - 1
+                mode := WORD [@bytes][bytIndex] >> 8
+                value := WORD [@bytes][bytIndex] & $ff
+                case mode
+                    MK_START:
+                        term.fstr0(string("  start()\r\n"))
+                    MK_WRITE:
+                        term.fstr1(string("  write(0x%.02x)\r\n"), value)
+                    MK_READ:
+                        term.fstr1(string("  read(0x%.02x)\r\n"), value)
+                    MK_STOP:
+                        term.fstr0(string("  stop()\r\n"))
+                    MK_SCL:
+                        term.fstr1(string("  SCL=%d\r\n"), value)
+                    MK_SDA:
+                        term.fstr1(string("  SDA=%d\r\n"), value)
+                    other:
+                        term.fstr0(string("  {unknown??}}\r\n"))
+            count := 0
 
 pub quiesce(pScl, pSda, pullup) | scl, sda
 
