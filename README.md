@@ -15,6 +15,8 @@ The demo for this project is some quick software I whipped up to control a 6-axi
 What's completed and what's not:
 
 ```
+14 Jun 2021 14:45
+- Arm is starting to position nicely... now planning needed positions...
 06 Jun 2021 17:35
 - Just wiring up the hardware so we can develop this driver. 
 - Seeding our code base with various starter objects
