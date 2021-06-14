@@ -93,7 +93,11 @@ PUB demo() | loopIndex
 
     pwmController.enableDebug(TRUE)
     arm.start()
+
+    'repeat' hold here
+
     'arm.doServoSteps()
+    arm.demoPositions(2)
 
 PRI quietController()
 
