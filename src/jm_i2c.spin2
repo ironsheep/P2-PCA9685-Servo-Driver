@@ -38,7 +38,7 @@ con
   MAX_LOG_ENTRIES = 30
 
 OBJ
-    term                : "jm_serial_singleton"                 ' terminal output
+    term                : "isp_jm_serial_singleton"                 ' terminal output
 
 var
     ' following 3 LONGs must stay in this position relative to each other!

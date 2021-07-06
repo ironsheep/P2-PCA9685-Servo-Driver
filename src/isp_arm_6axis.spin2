@@ -52,7 +52,7 @@ DEFAULT_GRIP_SERVO_MIN = 1110
 OBJ { our objects }
 
     servos[MAX_SERVOS]  : "isp_i2c_pca9685_servo"               ' our six servos
-    term                : "jm_serial_singleton"                 ' terminal output
+    term                : "isp_jm_serial_singleton"                 ' terminal output
 
 pub null()
 
@@ -65,7 +65,7 @@ pub start() : ok | angle
     initArmServos()
 
     homeArm()
-    waitms(3000)   ' hold for 10 secs
+    waitms(3000)   ' hold for 3 secs
 
     term.fstr0(string("** start() EXIT\r\n"))
     'repeat  ' just stall here
@@ -86,29 +86,37 @@ PUB homeArm()
 PUB position(moVar) : bDidMove
     '' tell arm to move to specific position
     bDidMove := FALSE
+'#0, MO_NONE, MO_ELBO, MO_VERTICAL, MO_BOT_DOWN, MO_TOP_DOWN, MO_RT_DOWN, MO_FRONT_DOWN, MO_LT_DOWN, MO_BACK_DOWN, MO_ARM_CANTELEVER_F, MO_ARM_CANTELEVER_B
     case moVar
         MO_ELBO:
-            'armHomeBentOverBase()
+            'armFlatForwardYellowUp()
             'bDidMove := TRUE
         MO_VERTICAL:
             'armHomeVertical()
             'bDidMove := TRUE
-        MO_BOT_DOWN:
-            armHomeBentOverBase()
+        MO_BOT_DOWN:                    '  YELLLOW UP / GREEN DOWN - OFF a bit
+            armFlatForwardYellowUp()
             bDidMove := TRUE
-        MO_TOP_DOWN:
-        MO_RT_DOWN:
-            armFlatForwardGripVert()
+        MO_TOP_DOWN:                    '  GREEN UP / YELLLOW DOWN
+            armFlatBackGreenUp()
             bDidMove := TRUE
-        MO_FRONT_DOWN:
-        MO_LT_DOWN:
-        MO_BACK_DOWN:
+        MO_RT_DOWN:                     '  ORANGE UP / RED DOWN  - tilted forward, tilted right
+            armFlatForwardOrangeUp()
+            bDidMove := TRUE
+        MO_FRONT_DOWN:                  '  CYAN UP / PURPLE DOWN
+            armVertCyanUp()
+            bDidMove := TRUE
+        MO_LT_DOWN:                     '  RED UP / RED ORANGE  - tiled right
+            armFlatBackRedUp()              ' GOOD
+            bDidMove := TRUE
+        MO_BACK_DOWN:                   '  PURPLE UP / CYAN DOWN
         MO_ARM_CANTELEVER_F:
-            armFlatForward()
-            bDidMove := TRUE
+            'armFlatForward()
+            'bDidMove := TRUE
         MO_ARM_CANTELEVER_B:
-            armFlatBack()
-            bDidMove := TRUE
+            'armFlatBack()
+            'armFlatBackYellowUp()
+            'bDidMove := TRUE
         other:
             bDidMove := FALSE
 
@@ -172,22 +180,28 @@ PRI initArmServos()
     ' configure all the servo objects with channel and limits specific to each
     term.fstr0(string("** initArmServos()\r\n"))
     servos[SERVO_BASE].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_360_DEGREE)
-    servos[SERVO_BASE].init(CHAN_SERVO_BASE, servos.M_NOT_SET, 0)
+    servos[SERVO_BASE].init(CHAN_SERVO_BASE, servos.M_NOT_SET, 0, string("Base"))
+    servos[SERVO_BASE].enableDebug(TRUE)
 
     servos[SERVO_SHOULDER].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
-    servos[SERVO_SHOULDER].init(CHAN_SERVO_SHOULDER, servos.M_NOT_SET, 0)
+    servos[SERVO_SHOULDER].init(CHAN_SERVO_SHOULDER, servos.M_NOT_SET, 0, string("Shldr"))
+    servos[SERVO_SHOULDER].enableDebug(TRUE)
 
     servos[SERVO_ELBOW].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
-    servos[SERVO_ELBOW].init(CHAN_SERVO_ELBOW, servos.M_NOT_SET, 0)
+    servos[SERVO_ELBOW].init(CHAN_SERVO_ELBOW, servos.M_NOT_SET, 0, string("Elbow"))
+    servos[SERVO_ELBOW].enableDebug(TRUE)
 
     servos[SERVO_WRIST_FLEX].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
-    servos[SERVO_WRIST_FLEX].init(CHAN_SERVO_WRIST_FLEX, servos.M_NOT_SET, 0)
+    servos[SERVO_WRIST_FLEX].init(CHAN_SERVO_WRIST_FLEX, servos.M_NOT_SET, 0, string("WrFlex"))
+    servos[SERVO_WRIST_FLEX].enableDebug(TRUE)
 
     servos[SERVO_WRIST_ROTATE].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
-    servos[SERVO_WRIST_ROTATE].init(CHAN_SERVO_WRIST_ROTATE, servos.M_NOT_SET, 0)
+    servos[SERVO_WRIST_ROTATE].init(CHAN_SERVO_WRIST_ROTATE, servos.M_NOT_SET, 0, string("WrRota"))
+    servos[SERVO_WRIST_ROTATE].enableDebug(TRUE)
 
     servos[SERVO_GRIP].configureMinCtrMaxType(DEFAULT_GRIP_SERVO_MIN, servos.CALCULATE_CENTER, DEFAULT_GRIP_SERVO_MAX, servos.ST_STANDARD)
-    servos[SERVO_GRIP].init(CHAN_SERVO_GRIP, servos.M_NOT_SET, 0)
+    servos[SERVO_GRIP].init(CHAN_SERVO_GRIP, servos.M_NOT_SET, 0, string("Grip"))
+    servos[SERVO_GRIP].enableDebug(TRUE)
 
 
 PRI armHomeVertical()
@@ -195,23 +209,85 @@ PRI armHomeVertical()
     term.fstr0(string("** armHomeVertical() SLEW\r\n"))
     servos[SERVO_BASE].slewToPostion(servos.M_ANGLE, HOME_SERVO_BASE)
     servos[SERVO_SHOULDER].slewToPostion(servos.M_ANGLE, HOME_SERVO_SHOULDER)
-    servos[SERVO_ELBOW].slewToPostion(servos.M_ANGLE, HOME_SERVO_ELBOW)
+    servos[SERVO_ELBOW].slewToPostion(servos.M_ANGLE, HOME_SERVO_ELBOW + 5)     ' 90 + 5 = 95
     servos[SERVO_WRIST_FLEX].slewToPostion(servos.M_ANGLE, HOME_SERVO_WRIST_FLEX)
     servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_ANGLE, HOME_SERVO_WRIST_ROTATE)
     servos[SERVO_GRIP].slewToPostion(servos.M_ANGLE, servos[SERVO_GRIP].centerMicroSec())
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
 
+PUB gripClosed()
+    ' close the jaws
+    term.fstr0(string("** gripClosed()\r\n"))
+    'term.fstr0(string("** gripClosed() SLEW\r\n"))
+    servos[SERVO_GRIP].writePosition(servos.M_USECS, DEFAULT_GRIP_SERVO_MIN)
 
-PRI armHomeBentOverBase()
+PUB gripOpen()
+    '' Open the jaws
+    'term.fstr0(string("** gripOpen() SLEW\r\n"))
+    term.fstr0(string("** gripOpen()\r\n"))
+    servos[SERVO_GRIP].writePosition(servos.M_USECS, DEFAULT_GRIP_SERVO_MAX)
+
+PUB positionServo(eServo, valueInUSec, minRange, maxRange) | servoIndex, newPosnUSec
+    '' Move servo to specified position (limited by its own range)
+    servoIndex := SERVO_BASE #> eServo <# SERVO_GRIP   ' must be one of our 6 servos
+    newPosnUSec:= servos[servoIndex].mapValueToServoPosnInUSec(valueInUSec, minRange, maxRange)
+    servos[servoIndex].writePosition(servos.M_USECS, newPosnUSec)
+
+PRI armFlatForwardYellowUp()
     ' place the arm bent at 90 degr overhanging base
-    term.fstr0(string("** armHomeBentOverBase() SLEW\r\n"))
+    ' YELLOW UP
+    term.fstr0(string("** armFlatForwardYellowUp() SLEW\r\n"))
     servos[SERVO_BASE].slewToPostion(servos.M_ANGLE, HOME_SERVO_BASE)
     servos[SERVO_SHOULDER].slewToPostion(servos.M_ANGLE, HOME_SERVO_SHOULDER)
     servos[SERVO_ELBOW].slewToPostion(servos.M_ANGLE, 8)
     servos[SERVO_WRIST_FLEX].slewToPostion(servos.M_ANGLE, HOME_SERVO_WRIST_FLEX)
-    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_ANGLE, HOME_SERVO_WRIST_ROTATE)
+    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_ANGLE, HOME_SERVO_WRIST_ROTATE + 10)   ' 90 + 10 = 100
     servos[SERVO_GRIP].slewToPostion(servos.M_ANGLE, servos[SERVO_GRIP].centerMicroSec())
+    ' wait for servos to arrive at target positions
+    continueSlewingUntilDone()
+
+PRI armFlatForwardOrangeUp()
+    ' arm flat 2nd means
+    ' ORANGE UP
+    term.fstr0(string("** armFlatForwardOrangeUp() SLEW\r\n"))
+    ' 1700 low
+    servos[SERVO_SHOULDER].slewToPostion(servos.M_USECS, 1650)
+    servos[SERVO_ELBOW].slewToPostion(servos.M_USECS, 900)
+    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 850)   ' Orig 900
+    ' wait for servos to arrive at target positions
+    continueSlewingUntilDone()
+
+PRI armFlatForwardRedUp()
+    ' arm flat 2nd means - grip inverted
+    ' RED UP
+    term.fstr0(string("** armFlatForwardRedUp() SLEW\r\n"))
+    ' 1700 low
+    servos[SERVO_SHOULDER].slewToPostion(servos.M_USECS, 1650)
+    servos[SERVO_ELBOW].slewToPostion(servos.M_USECS, 800)
+    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 2300)
+    ' wait for servos to arrive at target positions
+    continueSlewingUntilDone()
+
+{
+PRI armFlatForwardPurpleUp()
+    ' arm flat 2nd means - grip ??
+    ' PURPLE UP
+    term.fstr0(string("** armFlatForwardPurpleUp() SLEW\r\n"))
+    ' 1700 low
+    servos[SERVO_SHOULDER].slewToPostion(servos.M_USECS, 1650)
+    servos[SERVO_ELBOW].slewToPostion(servos.M_USECS, 800)
+    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 1500)
+    ' wait for servos to arrive at target positions
+    continueSlewingUntilDone()
+'}
+
+PRI armVertCyanUp()
+    ' CYAN UP
+    term.fstr0(string("** armVertCyanUp() SLEW\r\n"))
+    servos[SERVO_SHOULDER].slewToPostion(servos.M_USECS, 1650)
+    servos[SERVO_ELBOW].slewToPostion(servos.M_USECS, 1800)
+    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 2200)
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
 
@@ -223,22 +299,44 @@ PRI armFlatBack()
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
 
+{
+PRI armFlatBackOrangeUp()
+    ' arm flat 1st means
+    ' ORANGE UP
+    term.fstr0(string("** armFlatBackOrangeUp() SLEW\r\n"))
+    servos[SERVO_SHOULDER].slewToPostion(servos.M_USECS, 1420)
+    servos[SERVO_ELBOW].slewToPostion(servos.M_USECS, 2200)
+    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 900)
+    ' wait for servos to arrive at target positions
+    continueSlewingUntilDone()
+'}
+
+PRI armFlatBackRedUp()
+    ' arm flat 1st means
+    ' RED UP
+    term.fstr0(string("** armFlatBackRedUp() SLEW\r\n"))
+    servos[SERVO_SHOULDER].slewToPostion(servos.M_USECS, 1420)
+    servos[SERVO_ELBOW].slewToPostion(servos.M_USECS, 2200)
+    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 800)   ' 2300 -> 800 when back
+    ' wait for servos to arrive at target positions
+    continueSlewingUntilDone()
+
+PRI armFlatBackGreenUp()
+    ' arm flat 1st means
+    term.fstr0(string("** armFlatBackGreenUp() SLEW\r\n"))
+    servos[SERVO_SHOULDER].slewToPostion(servos.M_USECS, 1420)
+    servos[SERVO_ELBOW].slewToPostion(servos.M_USECS, 2200)
+    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 1550)  ' orig 1500
+    ' wait for servos to arrive at target positions
+    continueSlewingUntilDone()
+
+
 PRI armFlatForward()
     ' arm flat 2nd means
     term.fstr0(string("** armFlatForward() SLEW\r\n"))
     ' 1700 low
     servos[SERVO_SHOULDER].slewToPostion(servos.M_USECS, 1650)
     servos[SERVO_ELBOW].slewToPostion(servos.M_USECS, 800)
-    ' wait for servos to arrive at target positions
-    continueSlewingUntilDone()
-
-PRI armFlatForwardGripVert()
-    ' arm flat 2nd means
-    term.fstr0(string("** armFlatForward() SLEW\r\n"))
-    ' 1700 low
-    servos[SERVO_SHOULDER].slewToPostion(servos.M_USECS, 1650)
-    servos[SERVO_ELBOW].slewToPostion(servos.M_USECS, 800)
-    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 800)
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
 

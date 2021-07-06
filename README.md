@@ -8,13 +8,19 @@ The goal of this project is to produce a P2 Obex object for control of 16-channe
 
 (while the Servos can be controlled directly from the P2 this demonstrates an alternative fewer wires control of up to 16 servos for a couple of bucks more.)
 
-The demo for this project is some quick software I whipped up to control a 6-axis arm which I'm using to position a motion sensor while i'm developing the motion sensor driver logic.  (This gives me highly repeatable positional testing of the sensor and is frankly quite fun.  *I dreamed of doing this when I was testing an Apple Watch app which was detecting human falls.*)
+The demo for this project is some quick software I whipped up to control a 6-axis arm which I'm using to position a motion sensor while i'm developing the motion sensor driver logic.  (This gives me highly repeatable positional testing of the sensor and is frankly quite fun.  *I dreamed of doing this back when I was testing an Apple Watch app which was detecting human falls.*)
+
+And as I started in on this I also decided to use JonnyMac's FlySky SBUS support to also control the arm...
 
 ## Current status
 
 What's completed and what's not:
 
 ```
+06 Jul 2021 17:52
+- First working flysky positioning of arm so we can setup positions and get servo values
+28 Jun 2021 
+- Servo slewing is working well
 14 Jun 2021 14:45
 - Arm is starting to position nicely... now planning needed positions...
 06 Jun 2021 17:35
