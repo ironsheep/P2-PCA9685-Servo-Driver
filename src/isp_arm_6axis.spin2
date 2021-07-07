@@ -236,7 +236,7 @@ PUB positionServo(eServo, valueInUSec, minRange, maxRange) | servoIndex, newPosn
     '' Move servo to specified position (limited by its own range)
     servoIndex := SERVO_BASE #> eServo <# SERVO_GRIP   ' must be one of our 6 servos
     newPosnUSec:= servos[servoIndex].mapValueToServoPosnInUSec(valueInUSec, minRange, maxRange)
-    servos[servoIndex].writePosition(servos.M_USECS, newPosnUSec)
+    servos[servoIndex].slewToPostion(servos.M_USECS, newPosnUSec)
 
 PRI armFlatForwardYellowUp()
     ' place the arm bent at 90 degr overhanging base
@@ -343,6 +343,12 @@ PRI armFlatForward()
     servos[SERVO_ELBOW].slewToPostion(servos.M_USECS, 800)
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
+
+PUB finishMovement() | bSlewComplete
+    '' wait for all servos to finish their move
+    bSlewComplete := allServosAtTarget()
+    if not bSlewComplete
+        continueSlewingUntilDone()
 
 PRI continueSlewingUntilDone() | bSlewComplete, servoIndex, bDidMove
     ' tell any servos not at target to continue to next position...

@@ -90,14 +90,14 @@ PUB main() | statusOK, index
     term.fstr0(string("initController()\r\n"))
     statusOK := initController()    ' start our i2c PCA9685 controller
 
-    {
+    '{
     ' ----------- drive arm using controller - showing positions always
     if statusOK
         term.fstr0(string("arm remote control\r\n"))
         resetServoController(statusOK)
         remoteControlArm()
     '}
-    '{
+    {
     ' ----------- run arm thru positions and stop
     if statusOK
         term.fstr0(string("demo()\r\n"))
@@ -110,7 +110,7 @@ PUB main() | statusOK, index
     tearDown()  ' stop any cogs, if needed
     term.fstr0(string("\r\nDone\r\n"))
 
-PUB remoteControlArm() | bIsJawOpen, bLastJawOpenState, bServoGroupUpper, posn, rngMin, rngMax
+PUB remoteControlArm() | bIsJawOpen, bLastJawOpenState
     pwmController.enableDebug(TRUE)
     arm.start()
     arm.gripClosed()
@@ -132,8 +132,15 @@ PUB remoteControlArm() | bIsJawOpen, bLastJawOpenState, bServoGroupUpper, posn, 
 
         waitms(125)    ' wait 1/8 sec.
 
+        updPosnBothJoy()
+
+    ' done, reset arm
+    arm.homeArm()
+
+PRI updPosnDAndRtJoy() | bServoGroupUpper, posn, rngMin, rngMax
+' loop on joysitck values forwarding them to our servos
         repeat 7
-        ' swD which servo pair?
+            ' swD which servo pair?
             bServoGroupUpper := remoteCtl.swIsOff(remoteCtl.CTL_SW_D)
             if bServoGroupUpper
                 ' route Rt Joystick Vt to Wrist Rotate
@@ -143,7 +150,7 @@ PUB remoteControlArm() | bIsJawOpen, bLastJawOpenState, bServoGroupUpper, posn, 
 
                 ' route Rt Joystick Hz to Wrist Flex
                 posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_HZ)
-                rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_VT)
+                rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_HZ)
                 arm.positionServo(arm.SERVO_WRIST_FLEX, posn, rngMin, rngMax)
             else
                 ' route Rt Joystick Vt to Elbow
@@ -153,13 +160,38 @@ PUB remoteControlArm() | bIsJawOpen, bLastJawOpenState, bServoGroupUpper, posn, 
 
                 ' route Rt Joystick Hz to Shoulder
                 posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_HZ)
-                rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_VT)
+                rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_HZ)
                 arm.positionServo(arm.SERVO_SHOULDER, posn, rngMin, rngMax)
 
             waitms(125)    ' wait 1/8 sec.
 
-    ' done, reset arm
-    arm.homeArm()
+PRI updPosnBothJoy() | posn, rngMin, rngMax
+' loop on joysitck values forwarding them to our servos
+        repeat 7
+            ' swD which servo pair?
+            ' route Rt Joystick Vt to Wrist Rotate
+            posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_VT)
+            rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_VT)
+            arm.positionServo(arm.SERVO_WRIST_ROTATE, posn, rngMin, rngMax)
+
+            ' route Rt Joystick Hz to Wrist Flex
+            posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_HZ)
+            rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_HZ)
+            arm.positionServo(arm.SERVO_WRIST_FLEX, posn, rngMin, rngMax)
+
+            ' route Lt Joystick Hz (spring center) to Shoulder
+            posn := remoteCtl.readChannel(remoteCtl.CTL_LT_JOY_VT)
+            rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_LT_JOY_VT)
+            arm.positionServo(arm.SERVO_SHOULDER, posn, rngMin, rngMax)
+
+            ' route Lt Joystick Vt to Elbow
+            posn := remoteCtl.readChannel(remoteCtl.CTL_LT_JOY_HZ)
+            rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_LT_JOY_HZ)
+            arm.positionServo(arm.SERVO_ELBOW, posn, rngMin, rngMax)
+
+            arm.finishMovement()
+
+            'waitms(125)    ' wait 1/8 sec.
 
 PUB demo() | loopIndex
 
