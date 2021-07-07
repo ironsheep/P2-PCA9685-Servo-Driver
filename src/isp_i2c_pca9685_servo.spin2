@@ -25,6 +25,8 @@ CON
 
     DEFAULT_SLEW_RATE_IN_USEC = 30
 
+    MAX_SERVO_NAME_CHARS = 10
+
 VAR
 
     LONG    channel                                             ' servo controller channel [0-15]
@@ -43,13 +45,13 @@ VAR
     BYTE    bShowDebug
     BYTE    bPriorShowDebug
     BYTE    bHaveLimits                                         ' true when limits are specified
-    BYTE    bSlewInProgress                                     ' true when a slew has started, false when ended (or not started)
-    BYTE    nameStr[10+1]
+    BYTE    nameStr[MAX_SERVO_NAME_CHARS + 1]
 
 OBJ
 
     pca9685     : "isp_i2c_pca9685"                     ' our 16-chan servo controller
-    term        : "isp_jm_serial_singleton"                 ' debug terminal output
+    term        : "isp_jm_serial_singleton"             ' debug terminal output
+    nstr        : "jm_nstr"                             ' number-to-string
 
 PUB null()
 
@@ -67,21 +69,21 @@ PUB init(chan, mode, value, pNameStr) | bValidMode, targetValue, nameLen
     ' fill in our name for debug use
     bShowDebug := FALSE
 
-    bytefill(@nameStr, 0, 10+1)
+    bytefill(@nameStr, 0, MAX_SERVO_NAME_CHARS + 1)
+    byte [@nameStr][0] := chan + $30    ' add ASCII bias
+    byte [@nameStr][1] := $2D    ' hyphen
 
     nameLen := strsize(pNameStr)
-    if(nameLen > 10)
-        nameLen:= 10
+    if(nameLen > MAX_SERVO_NAME_CHARS - 2)
+        nameLen:= MAX_SERVO_NAME_CHARS - 2
 
-    bytemove(@nameStr, pNameStr, nameLen)
+    bytemove(@byte [@nameStr][2], pNameStr, nameLen)
 
     term.fstr4(string("+ init([%s]: CHAN %d, MODE %d, VAL %d)\r\n"), @nameStr, chan, mode, value)
-
 
     setServoDefaults()
 
     uSecSlewRate := DEFAULT_SLEW_RATE_IN_USEC  ' deafult to 30 uSec slew
-    bSlewInProgress := FALSE
 
     channel := 0 #> chan <# 15                                  ' save controller channel for this servo
     bChannelSpecified := TRUE                                   ' mark servo channel as specified
@@ -98,19 +100,38 @@ DAT  { mode formatting strings }
 
 modeMsg BYTE    "mode",0
 usMsg BYTE    "uSec",0
-degrMsg BYTE    "uSec",0
+degrMsg BYTE    "degr",0
 
 VAR { mode formatting vars }
 
     BYTE    modeStr[30+1]
 
 
-PRI interpModeValue(mode, value) : pInterpStr | bValidMode
+PRI interpModeValue(mode, value) : pInterpStr | bValidMode, byteIndex, pDigitStr, valUSec, valDegr
+    pInterpStr := @modeStr
+    byte [@modeStr][0] := 0     ' space
     bValidMode := isValidMode(mode)
     if bValidMode
+        valUSec, valDegr := positionInLimits(mode, value)
+        byteIndex := 0
+        pDigitStr := nstr.itoa(valUSec, 10, 0)
+        byteIndex += strcpy(@byte [@modeStr][byteIndex], pDigitStr)
+        byte [@modeStr][byteIndex++] := $20     ' space
+        byteIndex += strcpy(@byte [@modeStr][byteIndex], @usMsg)
+        byte [@modeStr][byteIndex++] := $20     ' space
+        byte [@modeStr][byteIndex++] := $28     ' open paren
+        pDigitStr := nstr.itoa(valDegr, 10, 0)
+        byteIndex += strcpy(@byte [@modeStr][byteIndex], pDigitStr)
+        byte [@modeStr][byteIndex++] := $20     ' space
+        byteIndex += strcpy(@byte [@modeStr][byteIndex], @degrMsg)
+        byte [@modeStr][byteIndex++] := $29     ' close paren
+        byte [@modeStr][byteIndex++] := 0     ' string terminator
+    else
+        term.fstr2(string("+ interpModeValue(Mode %d, Value %d) BAD MODE!\r\n"), mode, value)
 
-
-
+PRI strcpy(pDest, pSrc) : lenCopied
+    lenCopied := strsize(pSrc)
+    bytemove(pDest, pSrc, lenCopied)
 
 PUB stop()
     '' Disable servo channel if previously configured
@@ -122,11 +143,11 @@ PUB enableDebug(bEnable)
     bShowDebug := bEnable
 
 PUB saveDebug()
-    '' Turn on/off file internal debug messaging (bEnable = T/F where T means show debug messages from this object)
+    '' Preserve last debug state (push state)
     bPriorShowDebug := bShowDebug
 
 PUB restoreDebug()
-    '' Turn on/off file internal debug messaging (bEnable = T/F where T means show debug messages from this object)
+    '' Restore prior debug state (pop state)
     bShowDebug := bPriorShowDebug
 
 PUB configureMinCtrMaxType(uSecMin, uSecCntr, uSecMax, type)
@@ -151,12 +172,13 @@ PUB setSlewRate(newRatInUSec)
     if newRatInUSec == 0
         uSecSlewRate := DEFAULT_LIMIT_USEC_MAX - DEFAULT_LIMIT_USEC_MIN ' eff no slew!
 
-
 PUB slewToPostion(mode, value) | bHaveHardware, bIsValidMode, currUSec, targetUSec, deltaUSec, intermediateTarget
     '' Start slew of servo to desired target position
     bHaveHardware := hardwareConfigured(string("slewToPostion"))
     bIsValidMode := isValidMode(mode)
     if (bHaveHardware && bIsValidMode)
+        if bShowDebug
+            term.fstr2(string("+ slewToPostion(%s) [%s])\r\n"), interpModeValue(mode, value), @nameStr)
         saveDebug()
         bShowDebug := FALSE
         targetMode := mode
@@ -171,14 +193,13 @@ PUB continueSlew() : bAtTargetStatus | bHaveHardware, bIsValidMode, currUSec, ta
         targetUSec := convertPosition(targetMode, targetValue, M_USECS)
         currUSec := readPosition(M_USECS)
         deltaUSec := targetUSec - currUSec
-        if bShowDebug
-            term.fstr3(string("+ continueSlew() [%s], target %d, delta %d)\r\n"), @nameStr, targetUSec, deltaUSec)
+        'if bShowDebug
+        '    term.fstr3(string("+ continueSlew() [%s], target %d, delta %d)\r\n"), @nameStr, targetUSec, deltaUSec)
 
         ' if not at final target then move
         if currUSec == SERVO_POSITION_NOT_SET || deltaUSec <> 0
             ' if we have more then slew interval to move then just do slew distance
             if (abs deltaUSec > uSecSlewRate)
-                bSlewInProgress := TRUE
                 if targetUSec < currUSec
                     intermediateTargetUSec := currUSec - uSecSlewRate
                 else
@@ -192,6 +213,9 @@ PUB continueSlew() : bAtTargetStatus | bHaveHardware, bIsValidMode, currUSec, ta
             targetMode := M_NOT_SET ' done slewing
             restoreDebug()
 
+        if targetMode == M_NOT_SET
+            term.fstr1(string("+ continueSlew() [%s] targetMode CLEARED\r\n"), @nameStr)
+
 PUB isAtPostion() : bAtTargetStatus | bHaveHardware, bIsValidMode, currUSec, targetUSec
     '' Return T/F where T means this servo is at desired target position
     bHaveHardware := hardwareConfigured(string("isAtPostion"))
@@ -202,8 +226,7 @@ PUB isAtPostion() : bAtTargetStatus | bHaveHardware, bIsValidMode, currUSec, tar
         if bShowDebug
             term.fstr3(string("+ isAtPostion() [%s], target %d == %d  --SLEW--\r\n"), @nameStr, targetUSec, bAtTargetStatus)
     else
-        bAtTargetStatus := TRUE ' if not slewing we are at desired target
-        'term.fstr2(string("+ isAtPostion() CHAN %d  == %d\r\n"), channel, bAtTargetStatus)
+        bAtTargetStatus := TRUE ' if not slewing, we are at desired target
 
 PUB writePosition(mode, value) | bHaveHardware, bIsValidMode, currValue
     '' Update servo
@@ -215,7 +238,7 @@ PUB writePosition(mode, value) | bHaveHardware, bIsValidMode, currValue
         currValue := readPosition(mode)
         if currValue <> value
             if bShowDebug
-                term.fstr3(string("+ writePosition([%s] MODE %d, %d degr/uS)\r\n"), @nameStr, mode, value)
+                term.fstr2(string("+ writePosition([%s] %s)\r\n"), @nameStr, interpModeValue(mode, value))
             uSecPosn, degrPosn := positionInLimits(mode, value)
             pca9685.enableDebug(bShowDebug)
             pca9685.gotoMicroSec(channel, uSecPosn)                             ' update servo

@@ -89,12 +89,15 @@ PUB main() | statusOK, index
 
     term.fstr0(string("initController()\r\n"))
     statusOK := initController()    ' start our i2c PCA9685 controller
+
+    {
     ' ----------- drive arm using controller - showing positions always
     if statusOK
         term.fstr0(string("arm remote control\r\n"))
         resetServoController(statusOK)
         remoteControlArm()
-    {
+    '}
+    '{
     ' ----------- run arm thru positions and stop
     if statusOK
         term.fstr0(string("demo()\r\n"))

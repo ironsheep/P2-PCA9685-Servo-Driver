@@ -349,9 +349,10 @@ PRI continueSlewingUntilDone() | bSlewComplete, servoIndex, bDidMove
                 servos[servoIndex].continueSlew()
                 bDidMove := TRUE
         if bDidMove
-            waitms(10)    ' 25 sorta ok, trying 10
+            waitms(25)    ' 25 sorta ok, 10 bad, 20 sorta ok too (too much rocking)
             bSlewComplete := allServosAtTarget()
     while not bSlewComplete
+    term.fstr0(string("** continueSlewingUntilDone() DONE\r\n\r\n"))
 
 
 PRI allServosAtTarget() : bAtTArgetStatus | servoIndex, bDoneStatus
@@ -363,8 +364,8 @@ PRI allServosAtTarget() : bAtTArgetStatus | servoIndex, bDoneStatus
             quit    ' outta here, we know our answer
     if bAtTArgetStatus
         term.fstr0(string("** allServosAtTarget() DONE\r\n"))
-    else
-        term.fstr0(string("** allServosAtTarget() waiting...\r\n"))
+    'else
+    '    term.fstr0(string("** allServosAtTarget() waiting...\r\n"))
 
 
 PUB doServoSteps() | angle
