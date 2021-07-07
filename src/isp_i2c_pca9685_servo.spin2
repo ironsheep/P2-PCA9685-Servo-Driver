@@ -43,6 +43,7 @@ VAR
     BYTE    bChannelSpecified                                   ' true when servo-channel is set up
     BYTE    bStopped
     BYTE    bShowDebug
+    BYTE    bHaveSavedDebug
     BYTE    bPriorShowDebug
     BYTE    bHaveLimits                                         ' true when limits are specified
     BYTE    nameStr[MAX_SERVO_NAME_CHARS + 1]
@@ -68,6 +69,7 @@ PUB init(chan, mode, value, pNameStr) | bValidMode, targetValue, nameLen
 '  servo.init(14, M_ANGLE, 90)     ' assign channel and move servo to 90 degr
     ' fill in our name for debug use
     bShowDebug := FALSE
+    bHaveSavedDebug := FALSE
 
     bytefill(@nameStr, 0, MAX_SERVO_NAME_CHARS + 1)
     byte [@nameStr][0] := chan + $30    ' add ASCII bias
@@ -79,7 +81,7 @@ PUB init(chan, mode, value, pNameStr) | bValidMode, targetValue, nameLen
 
     bytemove(@byte [@nameStr][2], pNameStr, nameLen)
 
-    term.fstr4(string("+ init([%s]: CHAN %d, MODE %d, VAL %d)\r\n"), @nameStr, chan, mode, value)
+    term.fstr3(string("+ init([%s]: CHAN %d, %s)\r\n"), @nameStr, chan, interpModeValue(mode, value))
 
     setServoDefaults()
 
@@ -96,43 +98,6 @@ PUB init(chan, mode, value, pNameStr) | bValidMode, targetValue, nameLen
         if bValidMode
             writePosition(mode, value)
 
-DAT  { mode formatting strings }
-
-modeMsg BYTE    "mode",0
-usMsg BYTE    "uSec",0
-degrMsg BYTE    "degr",0
-
-VAR { mode formatting vars }
-
-    BYTE    modeStr[30+1]
-
-
-PRI interpModeValue(mode, value) : pInterpStr | bValidMode, byteIndex, pDigitStr, valUSec, valDegr
-    pInterpStr := @modeStr
-    byte [@modeStr][0] := 0     ' space
-    bValidMode := isValidMode(mode)
-    if bValidMode
-        valUSec, valDegr := positionInLimits(mode, value)
-        byteIndex := 0
-        pDigitStr := nstr.itoa(valUSec, 10, 0)
-        byteIndex += strcpy(@byte [@modeStr][byteIndex], pDigitStr)
-        byte [@modeStr][byteIndex++] := $20     ' space
-        byteIndex += strcpy(@byte [@modeStr][byteIndex], @usMsg)
-        byte [@modeStr][byteIndex++] := $20     ' space
-        byte [@modeStr][byteIndex++] := $28     ' open paren
-        pDigitStr := nstr.itoa(valDegr, 10, 0)
-        byteIndex += strcpy(@byte [@modeStr][byteIndex], pDigitStr)
-        byte [@modeStr][byteIndex++] := $20     ' space
-        byteIndex += strcpy(@byte [@modeStr][byteIndex], @degrMsg)
-        byte [@modeStr][byteIndex++] := $29     ' close paren
-        byte [@modeStr][byteIndex++] := 0     ' string terminator
-    else
-        term.fstr2(string("+ interpModeValue(Mode %d, Value %d) BAD MODE!\r\n"), mode, value)
-
-PRI strcpy(pDest, pSrc) : lenCopied
-    lenCopied := strsize(pSrc)
-    bytemove(pDest, pSrc, lenCopied)
-
 PUB stop()
     '' Disable servo channel if previously configured
     if (bChannelSpecified)
@@ -144,11 +109,19 @@ PUB enableDebug(bEnable)
 
 PUB saveDebug()
     '' Preserve last debug state (push state)
-    bPriorShowDebug := bShowDebug
+    if not bHaveSavedDebug
+        bPriorShowDebug := bShowDebug
+        bHaveSavedDebug := TRUE
+    else
+        term.fstr0(string("!!! saveDebug() ERROR - Already SAVED!\r\n"))
 
 PUB restoreDebug()
     '' Restore prior debug state (pop state)
-    bShowDebug := bPriorShowDebug
+    if bHaveSavedDebug
+        bShowDebug := bPriorShowDebug
+        bHaveSavedDebug := FALSE
+    else
+        term.fstr0(string("!!! restoreDebug() ERROR - Nothing SAVED to restore!\r\n"))
 
 PUB configureMinCtrMaxType(uSecMin, uSecCntr, uSecMax, type)
     '' Configure limits and center for this servo instance
@@ -238,7 +211,7 @@ PUB writePosition(mode, value) | bHaveHardware, bIsValidMode, currValue
         currValue := readPosition(mode)
         if currValue <> value
             if bShowDebug
-                term.fstr2(string("+ writePosition([%s] %s)\r\n"), @nameStr, interpModeValue(mode, value))
+                term.fstr2(string("+ writePosition(%s) [%s]\r\n"), interpModeValue(mode, value), @nameStr)
             uSecPosn, degrPosn := positionInLimits(mode, value)
             pca9685.enableDebug(bShowDebug)
             pca9685.gotoMicroSec(channel, uSecPosn)                             ' update servo
@@ -263,6 +236,42 @@ PUB mapValueToServoPosnInUSec(inValue,  inMin,  inMax) : valueInUSec
 
 
 CON  { ---- PRIVATE Utility Methods ---- }
+
+DAT  { mode formatting strings }
+
+usMsg BYTE    "uSec",0
+degrMsg BYTE    "degr",0
+
+VAR { mode formatting vars }
+
+    BYTE    modeStr[30+1]
+
+
+PRI interpModeValue(mode, value) : pInterpStr | bValidMode, byteIndex, pDigitStr, valUSec, valDegr
+    pInterpStr := @modeStr
+    byte [@modeStr][0] := 0     ' space
+    bValidMode := isValidMode(mode)
+    if bValidMode
+        valUSec, valDegr := positionInLimits(mode, value)
+        byteIndex := 0
+        pDigitStr := nstr.itoa(valUSec, 10, 0)
+        byteIndex += strcpy(@byte [@modeStr][byteIndex], pDigitStr)
+        byte [@modeStr][byteIndex++] := $20     ' space
+        byteIndex += strcpy(@byte [@modeStr][byteIndex], @usMsg)
+        byte [@modeStr][byteIndex++] := $20     ' space
+        byte [@modeStr][byteIndex++] := $28     ' open paren
+        pDigitStr := nstr.itoa(valDegr, 10, 0)
+        byteIndex += strcpy(@byte [@modeStr][byteIndex], pDigitStr)
+        byte [@modeStr][byteIndex++] := $20     ' space
+        byteIndex += strcpy(@byte [@modeStr][byteIndex], @degrMsg)
+        byte [@modeStr][byteIndex++] := $29     ' close paren
+        byte [@modeStr][byteIndex++] := 0     ' string terminator
+    else
+        term.fstr2(string("+ interpModeValue(Mode %d, Value %d) BAD MODE!\r\n"), mode, value)
+
+PRI strcpy(pDest, pSrc) : lenCopied
+    lenCopied := strsize(pSrc)
+    bytemove(pDest, pSrc, lenCopied)
 
 PRI isValidMode(mode) : bValidStatus
     bValidStatus := FALSE

@@ -217,16 +217,20 @@ PRI armHomeVertical()
     continueSlewingUntilDone()
 
 PUB gripClosed()
-    ' close the jaws
+    '' Close the jaws
     term.fstr0(string("** gripClosed()\r\n"))
-    'term.fstr0(string("** gripClosed() SLEW\r\n"))
     servos[SERVO_GRIP].writePosition(servos.M_USECS, DEFAULT_GRIP_SERVO_MIN)
+    'term.fstr0(string("** gripClosed() SLEW\r\n"))
+    'servos[SERVO_GRIP].slewToPostion(servos.M_USECS, DEFAULT_GRIP_SERVO_MIN)
+    'continueSlewingUntilDone()
 
 PUB gripOpen()
     '' Open the jaws
-    'term.fstr0(string("** gripOpen() SLEW\r\n"))
     term.fstr0(string("** gripOpen()\r\n"))
     servos[SERVO_GRIP].writePosition(servos.M_USECS, DEFAULT_GRIP_SERVO_MAX)
+    'term.fstr0(string("** gripOpen() SLEW\r\n"))
+    'servos[SERVO_GRIP].slewToPostion(servos.M_USECS, DEFAULT_GRIP_SERVO_MAX)
+    'continueSlewingUntilDone()
 
 PUB positionServo(eServo, valueInUSec, minRange, maxRange) | servoIndex, newPosnUSec
     '' Move servo to specified position (limited by its own range)
