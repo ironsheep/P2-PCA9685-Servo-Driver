@@ -19,11 +19,12 @@ CON
     CALCULATE_CENTER = -1
     SERVO_POSITION_NOT_SET = -1
 
-    DEFAULT_LIMIT_USEC_MIN = 600
-    DEFAULT_LIMIT_USEC_MAX = 2400
+    DEFAULT_LIMIT_USEC_MIN = 800    ' 600 uSec
     DEFAULT_LIMIT_USEC_CTR = 1500
+    DEFAULT_LIMIT_USEC_MAX = 2200   ' 2400 uSec
 
-    DEFAULT_SLEW_RATE_IN_USEC = 30
+    DEFAULT_SLEW_STEPS = 75
+    DEFAULT_SLEW_RATE_IN_USEC = (DEFAULT_LIMIT_USEC_MAX - DEFAULT_LIMIT_USEC_MIN) / DEFAULT_SLEW_STEPS
 
     MAX_SERVO_NAME_CHARS = 10
 
@@ -36,7 +37,7 @@ VAR
     LONG    uSecMinimum                                         ' default 600
     LONG    uSecCenter                                          ' default 1500
     LONG    uSecMaximum                                         ' default 2400
-    LONG    uSecSlewRate                                        ' default {DEFAULT_SLEW_RATE_IN_USEC}
+    LONG    uSecSlewRate                                        ' default {DEFAULT_SLEW_RATE_IN_USEC} 75 steps in full range
     LONG    targetMode                                          ' valid only during slew
     LONG    targetValue                                         ' valid only during slew
 
@@ -85,7 +86,7 @@ PUB init(chan, mode, value, pNameStr) | bValidMode, targetValue, nameLen
 
     setServoDefaults()
 
-    uSecSlewRate := DEFAULT_SLEW_RATE_IN_USEC  ' deafult to 30 uSec slew
+    uSecSlewRate := DEFAULT_SLEW_RATE_IN_USEC  ' deafult to 24 uSec slew, 75 increments
 
     channel := 0 #> chan <# 15                                  ' save controller channel for this servo
     bChannelSpecified := TRUE                                   ' mark servo channel as specified
@@ -131,6 +132,7 @@ PUB configureMinCtrMaxType(uSecMin, uSecCntr, uSecMax, type)
     uSecCenter := uSecCntr
     if(uSecCntr == CALCULATE_CENTER)
         uSecCenter := ((uSecMaximum - uSecMinimum) / 2) + uSecMinimum
+    uSecSlewRate := (uSecMaximum - uSecMinimum) / DEFAULT_SLEW_STEPS
     bHaveLimits := TRUE
     if bShowDebug
         term.fstr4(string("+ configureMinCtrMaxType(MIN %d, CTR %d, MAX %d, TYPE %d)\r\n"), uSecMin, uSecCenter, uSecMax, type)
@@ -141,9 +143,17 @@ PUB centerMicroSec() : centerInMicroSecs
 
 PUB setSlewRate(newRatInUSec)
     '' Set new slew rate for this servo instance (default 30 uSec)
-    uSecSlewRate := 5 #> newRatInUSec <# 450   ' min is 5 uSec ,max is 1/4 range
+    uSecSlewRate := 5 #> newRatInUSec <# 450   ' min is 5 uSec, max is 1/4 range
     if newRatInUSec == 0
         uSecSlewRate := DEFAULT_LIMIT_USEC_MAX - DEFAULT_LIMIT_USEC_MIN ' eff no slew!
+
+PUB setSlewSteps(newSlewStepCount) | valSlewSteps, slewRateInUSec
+    '' Set new slew rate for this servo instance in terms of # steps over limit-range
+    valSlewSteps := 1 #> newSlewStepCount <# 100   ' 1 - 100 steps limit
+    if newSlewStepCount == 0
+        valSlewSteps := DEFAULT_SLEW_STEPS ' default slew!
+    slewRateInUSec := (uSecMaximum - uSecMinimum) / valSlewSteps
+    setSlewRate(slewRateInUSec)
 
 PUB slewToPostion(mode, value) | bHaveHardware, bIsValidMode, currUSec, targetUSec, deltaUSec, intermediateTarget
     '' Start slew of servo to desired target position
@@ -152,11 +162,13 @@ PUB slewToPostion(mode, value) | bHaveHardware, bIsValidMode, currUSec, targetUS
     if (bHaveHardware && bIsValidMode)
         if bShowDebug
             term.fstr2(string("+ slewToPostion(%s) [%s])\r\n"), interpModeValue(mode, value), @nameStr)
-        saveDebug()
+        ' now that slew can be called while slewing only save if NOT saved
+        if NOT bHaveSavedDebug
+            saveDebug()
         bShowDebug := FALSE
         targetMode := mode
         targetValue := value
-        continueSlew()
+        'continueSlew()
 
 PUB continueSlew() : bAtTargetStatus | bHaveHardware, bIsValidMode, currUSec, targetUSec, deltaUSec, intermediateTargetUSec
     '' Continue slew to target position ... to final target or just next increment
@@ -164,7 +176,7 @@ PUB continueSlew() : bAtTargetStatus | bHaveHardware, bIsValidMode, currUSec, ta
     bIsValidMode := isValidMode(targetMode)
     if (bHaveHardware && bIsValidMode)
         targetUSec := convertPosition(targetMode, targetValue, M_USECS)
-        currUSec := readPosition(M_USECS)
+        currUSec := readPosition(M_USECS) ' returns SERVO_POSITION_NOT_SET if servo not yet positioned first time
         deltaUSec := targetUSec - currUSec
         'if bShowDebug
         '    term.fstr3(string("+ continueSlew() [%s], target %d, delta %d)\r\n"), @nameStr, targetUSec, deltaUSec)
@@ -187,19 +199,23 @@ PUB continueSlew() : bAtTargetStatus | bHaveHardware, bIsValidMode, currUSec, ta
             restoreDebug()
 
         if targetMode == M_NOT_SET
-            term.fstr1(string("+ continueSlew() [%s] targetMode CLEARED\r\n"), @nameStr)
+            term.fstr2(string("+ continueSlew() [%s] Cg%d targetMode CLEARED\r\n"), @nameStr, cogid())
 
 PUB isAtPostion() : bAtTargetStatus | bHaveHardware, bIsValidMode, currUSec, targetUSec
     '' Return T/F where T means this servo is at desired target position
     bHaveHardware := hardwareConfigured(string("isAtPostion"))
     if (bHaveHardware && targetMode <> M_NOT_SET)
         targetUSec := convertPosition(targetMode, targetValue, M_USECS)
-        currUSec := readPosition(M_USECS)
+        currUSec := readPosition(M_USECS) ' returns SERVO_POSITION_NOT_SET if servo not yet positioned first time
         bAtTargetStatus := (currUSec == targetUSec) ? TRUE : FALSE
         if bShowDebug
-            term.fstr3(string("+ isAtPostion() [%s], target %d == %d  --SLEW--\r\n"), @nameStr, targetUSec, bAtTargetStatus)
+            term.fstr4(string("+ isAtPostion() [%s] Cg%d , target %d == %d  --SLEW--\r\n"), @nameStr, cogid(), targetUSec, bAtTargetStatus)
     else
         bAtTargetStatus := TRUE ' if not slewing, we are at desired target
+
+PUB isActive() : bActiveStatus
+    '' Return T/F where T means that servo is in USE (does know its last position)
+    bActiveStatus := (readPosition(M_USECS) <> SERVO_POSITION_NOT_SET)
 
 PUB writePosition(mode, value) | bHaveHardware, bIsValidMode, currValue
     '' Update servo
@@ -208,7 +224,7 @@ PUB writePosition(mode, value) | bHaveHardware, bIsValidMode, currValue
     bHaveHardware := hardwareConfigured(string("writePosition"))
     bIsValidMode := isValidMode(mode)
     if (bHaveHardware && bIsValidMode)
-        currValue := readPosition(mode)
+        currValue := readPosition(mode) ' returns SERVO_POSITION_NOT_SET if servo not yet positioned first time
         if currValue <> value
             if bShowDebug
                 term.fstr2(string("+ writePosition(%s) [%s]\r\n"), interpModeValue(mode, value), @nameStr)
@@ -218,7 +234,7 @@ PUB writePosition(mode, value) | bHaveHardware, bIsValidMode, currValue
 
 PUB readPosition(mode) : result | bHaveHardware, bIsValidMode
     '' Return the current servo Position in {mode} units
-    result := 0
+    result := SERVO_POSITION_NOT_SET
     bHaveHardware := hardwareConfigured(string("readPosition"))
     bIsValidMode := isValidMode(mode)
     if (bHaveHardware && bIsValidMode)
@@ -226,8 +242,11 @@ PUB readPosition(mode) : result | bHaveHardware, bIsValidMode
             result := degrPosn
         else
             result := uSecPosn
-        if bShowDebug
-            term.fstr3(string("+ readPosition([%s] MODE %d) = %d degr/uS\r\n"), @nameStr, mode, result)
+    if bShowDebug
+        if result == SERVO_POSITION_NOT_SET
+            term.fstr2(string("+ readPosition([%s] MODE %d) = SERVO_POSITION_NOT_SET\r\n"), @nameStr, mode)
+        'else
+        '    term.fstr2(string("+ readPosition([%s]) [%s]\r\n"), @nameStr, interpModeValue(mode, result))
 
 
 PUB mapValueToServoPosnInUSec(inValue,  inMin,  inMax) : valueInUSec

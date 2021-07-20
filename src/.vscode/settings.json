@@ -6,7 +6,8 @@
         "**/CVS": true,
         "**/.DS_Store": true,
         "**/*.p2asm": true,
-        "**/*.binary": true
+        "**/*.binary": true,
+        "**/*.gz": true
     },
     "topLevel": "arm6axis_demo",
     "explorerExclude.backup": null
