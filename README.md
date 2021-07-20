@@ -1,22 +1,25 @@
 # P2-PCA9685-Servo-Driver
+
 Parallax Propeller V2 Interface object for the I2C 16-chan Servo Driver with demo of 6-Axis arm control
 
 ![Project Maintenance][maintenance-shield]
+
 [![License][license-shield]](LICENSE) 
 
 The goal of this project is to produce a P2 Obex object for control of 16-channels of PWM via I2C.
 
-(while the Servos can be controlled directly from the P2 this demonstrates an alternative fewer wires control of up to 16 servos for a couple of bucks more.)
+(while the Servos can be controlled directly from the P2, this demonstrates an alternative using fewer wires to control up to 16 servos for a couple of bucks more.)
 
-The demo for this project is some quick software I whipped up to control a 6-axis arm which I'm using to position a motion sensor while i'm developing the motion sensor driver logic.  (This gives me highly repeatable positional testing of the sensor and is frankly quite fun.  *I dreamed of doing this back when I was testing an Apple Watch app which was detecting human falls.*)
+The demo for this project is some quick software I whipped up to control a 6-axis arm which I'm using to position a motion sensor while i'm developing the motion sensor driver logic.  (This gives me highly repeatable positional testing of the sensor and is frankly quite fun.  *I dreamed of doing this back when I was testing an Apple Watch app that I was building to detect human falls.*)
 
 And as I started in on this I also decided to use JonnyMac's FlySky SBUS support to also control the arm...
 
-## Current status
 
-What's completed and what's not:
+**Latest Repo Updates**:
 
 ```
+20 Jul 2021 16:16
+- Moved to separate COG control of servo-slew for smooth arm movements
 06 Jul 2021 17:52
 - First working flysky positioning of arm so we can setup positions and get servo values
 28 Jun 2021 
@@ -28,9 +31,23 @@ What's completed and what's not:
 - Seeding our code base with various starter objects
 ```
 
+## Current status
+
+I'm working on position placement using FlySky then getting servo position readouts when I get to a desired ARM configuration.  Figuring out the puposes of the FlySky controls for this use case is proving to be quite interesting...
+
 ## Up Next
 
 - Work our way up from the hardware to the arm control to the scripting of the arm
+
+## Arm hardware from Amazon
+
+- ~ $41 No Servos [diymore Silver ROT3U 6DOF Aluminium Robot Arm Mechanical Robotic Clamp Claw Kits (Unassembled Parts Without Servos)](https://www.amazon.com/diymore-Aluminium-Mechanical-Robotic-Arduino/dp/B01LW0LUPT)
+- ~ $70 w/Servos [Dmyond DIY Aluminium Smart 6-Dof Robot Mechanical Arm Robotic Clamp Claw Kit with MG996R Servos 25T Metal Disc Horns and Screw (Robot Mechanical Arm+Servo)](https://www.amazon.com/Dmyond-Aluminium-Mechanical-MEGA2560-Learning/dp/B07XJM1P21)
+- ~140 Arm w/Servos Controller and SW [Robotic Arm Kit 6DOF Programming Robot Arm with Handle PC Software and APP Control with Tutorial](https://www.amazon.com/LewanSoul-Robotic-Arduino-Software-Tutorial/dp/B074T6DPKX)
+
+- SEARCH: [More Arms](https://www.amazon.com/s?k=6dof+servo+arm&ref=nb_sb_noss)
+
+- Servos [MG996R clones ~$20 4pk](https://www.amazon.com/4-Pack-MG996R-Torque-Digital-Helicopter/dp/B07MFK266B)
 
 ---
 
