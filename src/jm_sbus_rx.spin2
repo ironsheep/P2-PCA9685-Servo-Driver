@@ -67,6 +67,8 @@ con
 
   POS_CTR = (POS_MAX - POS_MIN) >> 1
 
+OBJ
+    term                : "isp_jm_serial_singleton"                 ' terminal output
 
 var
 
@@ -114,6 +116,7 @@ pub start(rxpin, p_defaults) : result | m, x
   pinstart(rxpin, M_SBUS, x, 0)                                 ' start smart pin rx for S.BUS
 
   cog := coginit(COGEXEC_NEW, @entry, @rxp) + 1                 ' start s.bus rx/decode cog
+  term.fstr1(string("-- SBUS COG #%d --\r\n"), cog)
 
   return cog
 

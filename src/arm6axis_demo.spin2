@@ -104,16 +104,17 @@ PUB main() | statusOK, index
 PUB remoteControlArm() | bIsJawOpen, bLastJawOpenState, cog
     cog := arm.start(PCA9685_SCL, PCA9685_SDA, PCA9685_OE)
     if cog <> -1
+        term.fstr1(string("-- ARM COG #%d --\r\n"), cog)
         arm.gripClosed()
 
-        bLastJawOpenState := FALSE
+        bLastJawOpenState := -2 ' value can't happen
         repeat 120
 
             ' SwA open/close JAW
             bIsJawOpen := remoteCtl.swIsOff(remoteCtl.CTL_SW_A)
-            term.fstr1(string("- SW bIsJawOpen = %d\r\n"), bIsJawOpen)
 
             if bIsJawOpen <> bLastJawOpenState
+                term.fstr1(string("- SW bIsJawOpen = %d\r\n"), bIsJawOpen)
                 term.fstr0(string("-- JAW act --\r\n"))
                 if bIsJawOpen
                     arm.gripOpen()
@@ -183,11 +184,14 @@ PUB demo() | loopIndex
     cog := arm.start(PCA9685_SCL, PCA9685_SDA, PCA9685_OE)
     if cog <> -1
         'arm.gripOpen()
-        'waitms(3000)
+        term.fstr0(string("-- [ startup ] --\r\n"))
+        waitms(1000)
         'repeat' hold here
+        term.fstr0(string("-- [ close grip ] --\r\n"))
         arm.gripClosed()
         waitms(2000)
 
+        term.fstr0(string("-- [ Demo arm moves ] --\r\n"))
         'arm.doServoSteps()
         arm.demoPositions(2)
 

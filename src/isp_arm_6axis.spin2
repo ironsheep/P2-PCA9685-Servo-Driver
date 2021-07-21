@@ -13,37 +13,38 @@
 
 CON { arm specifics }
 
-MAX_SERVOS = 8
+    MAX_SERVOS = 8
 
 ' which servos are on which PWM channels?
 #0, CHAN_SERVO_BASE, CHAN_SERVO_SHOULDER, CHAN_SERVO_ELBOW
 #4, CHAN_SERVO_WRIST_FLEX, CHAN_SERVO_WRIST_ROTATE, CHAN_SERVO_GRIP
 
-CHAN_SERVO_TEST_15 = 15
-CHAN_SERVO_TEST_12 = 12
+    CHAN_SERVO_TEST_15 = 15
+    CHAN_SERVO_TEST_12 = 12
 
 ' servo object indexes
 #0, SERVO_BASE, SERVO_SHOULDER, SERVO_ELBOW
 #3, SERVO_WRIST_FLEX, SERVO_WRIST_ROTATE, SERVO_GRIP
 #6, SERVO_TEST_12, SERVO_TEST_15
 
-HOME_SERVO_BASE = 90            ' 1500 stopped-moving
-HOME_SERVO_SHOULDER = 109       ' 1645 uSec vertical !!
-HOME_SERVO_ELBOW = 125          ' 1774 uSec vertical !!
-HOME_SERVO_WRIST_FLEX = 95      ' 1535 uSec vertical !!
-HOME_SERVO_WRIST_ROTATE = 94    ' 1530 uSec parallel to arm
-HOME_SERVO_GRIP = 79            ' 1416 uSec mid-way
+    HOME_SERVO_BASE = 90            ' 1500 stopped-moving
+    HOME_SERVO_SHOULDER = 109       ' 1645 uSec vertical !!
+    HOME_SERVO_ELBOW = 125          ' 1774 uSec vertical !!
+    HOME_SERVO_WRIST_FLEX = 95      ' 1535 uSec vertical !!
+    HOME_SERVO_WRIST_ROTATE = 94    ' 1530 uSec parallel to arm
+    HOME_SERVO_GRIP = 79            ' 1416 uSec mid-way
 
-HOME_SERVO_TEST_12 = 90
-HOME_SERVO_TEST_15 = 180
+    HOME_SERVO_TEST_12 = 90
+    HOME_SERVO_TEST_15 = 180
 
-DEFAULT_SERVO_MAX = 2200
-DEFAULT_SERVO_CENTER = 1500
-DEFAULT_SERVO_MIN = 800
+    DEFAULT_SERVO_MAX = 2200
+    DEFAULT_SERVO_CENTER = 1500
+    DEFAULT_SERVO_MIN = 800
 
+    SLEW_WAIT_IN_MS = 30
 
-DEFAULT_GRIP_SERVO_MIN = 1074   ' open
-DEFAULT_GRIP_SERVO_MAX = 1750   ' closed
+    DEFAULT_GRIP_SERVO_MIN = 1074   ' open
+    DEFAULT_GRIP_SERVO_MAX = 1750   ' closed
 
 #0, MO_NONE, MO_ELBO, MO_VERTICAL, MO_BOT_DOWN, MO_TOP_DOWN, MO_RT_DOWN, MO_FRONT_DOWN, MO_LT_DOWN, MO_BACK_DOWN, MO_ARM_CANTELEVER_F, MO_ARM_CANTELEVER_B
 
@@ -142,15 +143,16 @@ pub stopEx()
 
 PUB homeArm()
     '' place the arm completely upright at start of run
-    term.fstr0(string("** taskForceArmHome()\r\n"))
+    term.fstr0(string("** homeArm() ENTRY\r\n"))
     servos[SERVO_BASE].slewToPostion(servos.M_ANGLE, HOME_SERVO_BASE)
     servos[SERVO_SHOULDER].slewToPostion(servos.M_ANGLE, HOME_SERVO_SHOULDER)
     servos[SERVO_ELBOW].slewToPostion(servos.M_ANGLE, HOME_SERVO_ELBOW)
     servos[SERVO_WRIST_FLEX].slewToPostion(servos.M_ANGLE, HOME_SERVO_WRIST_FLEX)
     servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_ANGLE, HOME_SERVO_WRIST_ROTATE)
-    servos[SERVO_GRIP].slewToPostion(servos.M_USECS, DEFAULT_GRIP_SERVO_MAX)
+    servos[SERVO_GRIP].slewToPostion(servos.M_USECS, DEFAULT_GRIP_SERVO_MAX)    ' closed
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
+    term.fstr0(string("** homeArm() EXIT\r\n"))
 
 
 PUB demoPositions(loopCt) | moValue, bDidMove
@@ -250,12 +252,12 @@ PRI positionArm(moVar) : bDidMove
 
 PUB gripClosed()
     '' Close the jaws
-    term.fstr0(string("** gripClosed() SLEW\r\n"))
+    'term.fstr0(string("** gripClosed() SLEW\r\n"))
     servos[SERVO_GRIP].slewToPostion(servos.M_USECS, DEFAULT_GRIP_SERVO_MAX)
 
 PUB gripOpen()
     '' Open the jaws
-    term.fstr0(string("** gripOpen() SLEW\r\n"))
+    'term.fstr0(string("** gripOpen() SLEW\r\n"))
     servos[SERVO_GRIP].slewToPostion(servos.M_USECS, DEFAULT_GRIP_SERVO_MIN)
 
 PUB positionServo(eServo, valueInUSec, minRange, maxRange) | servoIndex, newPosnUSec
@@ -265,11 +267,12 @@ PUB positionServo(eServo, valueInUSec, minRange, maxRange) | servoIndex, newPosn
     servos[servoIndex].slewToPostion(servos.M_USECS, newPosnUSec)
 
 PUB doServoSteps() | angle
+    '' TEST METHOD stepping a single servo
     ' for( int angle =0; angle<181; angle +=20) {
     '    delay(500);
     '    pwm.setPWM(0, 0, angleToPulse(angle)
     ' };
-    term.fstr0(string("** doServoSteps() ENTRY\r\n"))
+    term.fstr0(string("\r\n** doServoSteps() ENTRY\r\n"))
     repeat
         repeat angle from 0 to 180 step 20
             waitms(500)
@@ -287,11 +290,11 @@ PUB quietController()
 
 CON  { ---- PRIVATE Slew Control TASK ---- }
 
-    SLEW_WAIT_IN_MS = 35
 
 PRI servoSlewTask() : ok | bDidMove, servoIndex
     ' this is our servo slewing code...
     '  we are slewing to keep our arm momentum/inertia low
+    term.fstr0(string("** servoSlewTask() running **\r\n"))
     taskInit()
     ok := taskInitController()
     if ok
@@ -299,7 +302,7 @@ PRI servoSlewTask() : ok | bDidMove, servoIndex
         pwmController.configureController()
 
             ' define servo ranges and such
-        initArmServos()
+        taskInitArmServos()
         ' place arm vertical to start with (this provides us with initial servo position as well)
         taskForceArmHome()
 
@@ -315,26 +318,15 @@ PRI servoSlewTask() : ok | bDidMove, servoIndex
     else
         term.fstr0(string("** servoSlewTask() startup failed (no pwm dvc)\r\n"))
 
-PRI taskForceArmHome()
-    '' place the arm completely upright at start of run
-    term.fstr0(string("** taskForceArmHome()\r\n"))
-    servos[SERVO_BASE].writePosition(servos.M_ANGLE, HOME_SERVO_BASE)
-    servos[SERVO_SHOULDER].writePosition(servos.M_ANGLE, HOME_SERVO_SHOULDER)
-    servos[SERVO_ELBOW].writePosition(servos.M_ANGLE, HOME_SERVO_ELBOW)
-    servos[SERVO_WRIST_FLEX].writePosition(servos.M_ANGLE, HOME_SERVO_WRIST_FLEX)
-    servos[SERVO_WRIST_ROTATE].writePosition(servos.M_ANGLE, HOME_SERVO_WRIST_ROTATE)
-    servos[SERVO_GRIP].writePosition(servos.M_USECS, DEFAULT_GRIP_SERVO_MAX)
-    ' wait for servos to arrive at target positions
-    waitms(500)    ' sleep 1/2 seconds
-
 PRI taskInit()
+    term.fstr0(string("** taskInit()\r\n"))
     pwmController.enableDebug(TRUE)
     pwmController.init(pin_scl, pin_sda, pin_oe)  ' set pins to output low... so we can set LA trigger
 
 PRI taskInitController() : ok | deviceFound
     ' find and configure our mpu9dof device
 
-    term.fstr0(string("Setup...\r\n"))
+    term.fstr0(string("** taskInitController() Setup...\r\n"))
     pwmController.enableDebug(TRUE)
     deviceFound := pwmController.start(pin_scl, pin_sda, pin_oe)                                           ' i2c @ 100kHz, no pull-ups
 
@@ -351,22 +343,20 @@ PRI taskInitController() : ok | deviceFound
     pwmController.enableOutput(TRUE)
     'term.fstr0(string("\r\nAccess PCA9685 16-chan PWM ...\r\n\r\n"))
 
-
-CON  { ---- PRIVATE Utility Methods ---- }
-
-PRI initArmServos()
+PRI taskInitArmServos()
     ' configure all the servo objects with channel and limits specific to each
-    term.fstr0(string("** initArmServos()\r\n"))
+    pwmController.enableDebug(FALSE)
+    term.fstr0(string("\r\n** taskInitArmServos() ENTRY\r\n"))
     servos[SERVO_BASE].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_360_DEGREE)
-    servos[SERVO_BASE].init(CHAN_SERVO_BASE, servos.M_NOT_SET, 0, string("Base"))
+    servos[SERVO_BASE].init(CHAN_SERVO_BASE, servos[SERVO_BASE].M_NOT_SET, 0, string("Base"))
     servos[SERVO_BASE].enableDebug(TRUE)
 
     servos[SERVO_SHOULDER].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
-    servos[SERVO_SHOULDER].init(CHAN_SERVO_SHOULDER, servos.M_NOT_SET, 0, string("Shldr"))
+    servos[SERVO_SHOULDER].init(CHAN_SERVO_SHOULDER, servos[SERVO_SHOULDER].M_NOT_SET, 0, string("Shldr"))
     servos[SERVO_SHOULDER].enableDebug(TRUE)
 
     servos[SERVO_ELBOW].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
-    servos[SERVO_ELBOW].init(CHAN_SERVO_ELBOW, servos.M_NOT_SET, 0, string("Elbow"))
+    servos[SERVO_ELBOW].init(CHAN_SERVO_ELBOW, servos[SERVO_ELBOW].M_NOT_SET, 0, string("Elbow"))
     servos[SERVO_ELBOW].enableDebug(TRUE)
 
     servos[SERVO_WRIST_FLEX].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
@@ -382,6 +372,25 @@ PRI initArmServos()
     servos[SERVO_GRIP].init(CHAN_SERVO_GRIP, servos.M_NOT_SET, 0, string("Grip"))
     servos[SERVO_GRIP].enableDebug(TRUE)
     servos[SERVO_GRIP].setSlewSteps(25) ' 25 vs. default 75 (full range slew in 25 steps)
+    term.fstr0(string("** taskInitArmServos() EXIT\r\n"))
+    pwmController.enableDebug(FALSE)
+
+PRI taskForceArmHome()
+    '' place the arm completely upright at start of run
+    pwmController.enableDebug(FALSE)
+    term.fstr0(string("\r\n** taskForceArmHome() ENTRY\r\n"))
+    servos[SERVO_BASE].writePosition(servos.M_ANGLE, HOME_SERVO_BASE)
+    servos[SERVO_SHOULDER].writePosition(servos.M_ANGLE, HOME_SERVO_SHOULDER)
+    servos[SERVO_ELBOW].writePosition(servos.M_ANGLE, HOME_SERVO_ELBOW)
+    servos[SERVO_WRIST_FLEX].writePosition(servos.M_ANGLE, HOME_SERVO_WRIST_FLEX)
+    servos[SERVO_WRIST_ROTATE].writePosition(servos.M_ANGLE, HOME_SERVO_WRIST_ROTATE)
+    servos[SERVO_GRIP].writePosition(servos.M_USECS, DEFAULT_GRIP_SERVO_MAX)
+    ' wait for servos to arrive at target positions
+    waitms(1000)    ' sleep 1 second
+    term.fstr0(string("** taskForceArmHome() EXIT\r\n"))
+
+
+CON  { ---- PRIVATE Utility Methods ---- }
 
 
 PRI armFlatForwardYellowUp()
@@ -490,9 +499,9 @@ PRI armFlatForward()
     continueSlewingUntilDone()
 
 PRI continueSlewingUntilDone() | bSlewComplete
-    ' tell any servos not at target to continue to next position...
+    '' loop until all servos are at their target
     repeat
-            waitms(30)    ' 25 sorta ok, 10 bad, 20 sorta ok too (too much rocking)
+            waitms(SLEW_WAIT_IN_MS)    ' 25 sorta ok, 10 bad, 20 sorta ok too (too much rocking)
             bSlewComplete := allServosAtTarget()
     while not bSlewComplete
     term.fstr0(string("** continueSlewingUntilDone() DONE\r\n\r\n"))

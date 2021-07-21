@@ -19,9 +19,9 @@ CON
     CALCULATE_CENTER = -1
     SERVO_POSITION_NOT_SET = -1
 
-    DEFAULT_LIMIT_USEC_MIN = 800    ' 600 uSec
+    DEFAULT_LIMIT_USEC_MIN = 800    ' was 600 uSec
     DEFAULT_LIMIT_USEC_CTR = 1500
-    DEFAULT_LIMIT_USEC_MAX = 2200   ' 2400 uSec
+    DEFAULT_LIMIT_USEC_MAX = 2200   ' was 2400 uSec
 
     DEFAULT_SLEW_STEPS = 75
     DEFAULT_SLEW_RATE_IN_USEC = (DEFAULT_LIMIT_USEC_MAX - DEFAULT_LIMIT_USEC_MIN) / DEFAULT_SLEW_STEPS
@@ -32,14 +32,17 @@ VAR
 
     LONG    channel                                             ' servo controller channel [0-15]
     LONG    servoType                                           ' [ST_NOT_SET, ST_STANDARD, ST_360_DEGREE]
-    LONG    uSecPosn                                            ' [600..2400]
-    LONG    degrPosn                                            ' [0..180]
-    LONG    uSecMinimum                                         ' default 600
+    LONG    uSecMinimum                                         ' default 600/800
     LONG    uSecCenter                                          ' default 1500
-    LONG    uSecMaximum                                         ' default 2400
+    LONG    uSecMaximum                                         ' default 2200/2400
     LONG    uSecSlewRate                                        ' default {DEFAULT_SLEW_RATE_IN_USEC} 75 steps in full range
-    LONG    targetMode                                          ' valid only during slew
-    LONG    targetValue                                         ' valid only during slew
+
+    ' last value written to servo
+    LONG    currPosnUSec                                        ' [600..2400]
+    LONG    currPosnDegr                                        ' [0..180]
+    ' destination value for servo (when stepping to destination)
+    LONG    targetUSec                                         ' valid only during slew
+    LONG    targetDegr                                         ' valid only during slew
 
     BYTE    bChannelSpecified                                   ' true when servo-channel is set up
     BYTE    bStopped
@@ -60,7 +63,7 @@ PUB null()
 '' This is not a top-level object
 
 
-PUB init(chan, mode, value, pNameStr) | bValidMode, targetValue, nameLen
+PUB init(chan, mode, value, pNameStr) | bValidMode, nameLen
 '' Configure servo output channel
 '' -- {chan} is pca9685 channel number [0-15] associated with this servo
 '' -- {mode} is M_ANGLE, M_USECS or 0 (M_NOT_SET)
@@ -71,6 +74,9 @@ PUB init(chan, mode, value, pNameStr) | bValidMode, targetValue, nameLen
     ' fill in our name for debug use
     bShowDebug := FALSE
     bHaveSavedDebug := FALSE
+    targetUSec := SERVO_POSITION_NOT_SET
+    targetDegr := SERVO_POSITION_NOT_SET
+
 
     bytefill(@nameStr, 0, MAX_SERVO_NAME_CHARS + 1)
     byte [@nameStr][0] := chan + $30    ' add ASCII bias
@@ -91,7 +97,7 @@ PUB init(chan, mode, value, pNameStr) | bValidMode, targetValue, nameLen
     channel := 0 #> chan <# 15                                  ' save controller channel for this servo
     bChannelSpecified := TRUE                                   ' mark servo channel as specified
 
-    uSecPosn := SERVO_POSITION_NOT_SET  ' preset nonsense values so we move first time
+    currPosnUSec := SERVO_POSITION_NOT_SET  ' preset nonsense values so we move first time
 
     if mode <> M_NOT_SET
         bValidMode := isValidMode(mode)
@@ -155,7 +161,7 @@ PUB setSlewSteps(newSlewStepCount) | valSlewSteps, slewRateInUSec
     slewRateInUSec := (uSecMaximum - uSecMinimum) / valSlewSteps
     setSlewRate(slewRateInUSec)
 
-PUB slewToPostion(mode, value) | bHaveHardware, bIsValidMode, currUSec, targetUSec, deltaUSec, intermediateTarget
+PUB slewToPostion(mode, value) | bHaveHardware, bIsValidMode, currUSec, deltaUSec, intermediateTarget
     '' Start slew of servo to desired target position
     bHaveHardware := hardwareConfigured(string("slewToPostion"))
     bIsValidMode := isValidMode(mode)
@@ -166,58 +172,55 @@ PUB slewToPostion(mode, value) | bHaveHardware, bIsValidMode, currUSec, targetUS
         if NOT bHaveSavedDebug
             saveDebug()
         bShowDebug := FALSE
-        targetMode := mode
-        targetValue := value
-        'continueSlew()
+        targetUSec, targetDegr := positionInLimits(mode, value)
 
-PUB continueSlew() : bAtTargetStatus | bHaveHardware, bIsValidMode, currUSec, targetUSec, deltaUSec, intermediateTargetUSec
+
+PUB continueSlew() : bAtTargetStatus | bHaveHardware, bIsValidTarget, deltaUSec, intermediateTargetUSec, bSlewComplete
     '' Continue slew to target position ... to final target or just next increment
     bHaveHardware := hardwareConfigured(string("continueSlew"))
-    bIsValidMode := isValidMode(targetMode)
-    if (bHaveHardware && bIsValidMode)
-        targetUSec := convertPosition(targetMode, targetValue, M_USECS)
-        currUSec := readPosition(M_USECS) ' returns SERVO_POSITION_NOT_SET if servo not yet positioned first time
-        deltaUSec := targetUSec - currUSec
+    if (bHaveHardware)
+        deltaUSec := targetUSec - currPosnUSec
         'if bShowDebug
         '    term.fstr3(string("+ continueSlew() [%s], target %d, delta %d)\r\n"), @nameStr, targetUSec, deltaUSec)
 
         ' if not at final target then move
-        if currUSec == SERVO_POSITION_NOT_SET || deltaUSec <> 0
+        bSlewComplete := FALSE
+        if deltaUSec <> 0
             ' if we have more then slew interval to move then just do slew distance
             if (abs deltaUSec > uSecSlewRate)
-                if targetUSec < currUSec
-                    intermediateTargetUSec := currUSec - uSecSlewRate
+                if targetUSec < currPosnUSec
+                    intermediateTargetUSec := currPosnUSec - uSecSlewRate
                 else
-                    intermediateTargetUSec := currUSec + uSecSlewRate
+                    intermediateTargetUSec := currPosnUSec + uSecSlewRate
                 writePosition(M_USECS, intermediateTargetUSec)
             else
                 ' have less than slew distance do rest of travel
                 writePosition(M_USECS, targetUSec)
-                targetMode := M_NOT_SET ' done slewing
+                bSlewComplete := TRUE
+
         else
-            targetMode := M_NOT_SET ' done slewing
+            bSlewComplete := TRUE
+
+        if bSlewComplete
             restoreDebug()
+            term.fstr2(string("+ continueSlew() [%s] Cg%d  DONE\r\n"), @nameStr, cogid())
 
-        if targetMode == M_NOT_SET
-            term.fstr2(string("+ continueSlew() [%s] Cg%d targetMode CLEARED\r\n"), @nameStr, cogid())
-
-PUB isAtPostion() : bAtTargetStatus | bHaveHardware, bIsValidMode, currUSec, targetUSec
+PUB isAtPostion() : bAtTargetStatus | bHaveHardware, bIsActive
     '' Return T/F where T means this servo is at desired target position
     bHaveHardware := hardwareConfigured(string("isAtPostion"))
-    if (bHaveHardware && targetMode <> M_NOT_SET)
-        targetUSec := convertPosition(targetMode, targetValue, M_USECS)
-        currUSec := readPosition(M_USECS) ' returns SERVO_POSITION_NOT_SET if servo not yet positioned first time
-        bAtTargetStatus := (currUSec == targetUSec) ? TRUE : FALSE
-        if bShowDebug
-            term.fstr4(string("+ isAtPostion() [%s] Cg%d , target %d == %d  --SLEW--\r\n"), @nameStr, cogid(), targetUSec, bAtTargetStatus)
+    bIsActive := isActive()
+    if (bHaveHardware && bIsActive)
+        bAtTargetStatus := (currPosnUSec == targetUSec) ? TRUE : FALSE
+        if bShowDebug && bAtTargetStatus == FALSE && targetUSec <> SERVO_POSITION_NOT_SET
+            term.fstr4(string("+ isAtPostion() [%s] Cg%d, target %d == %d  --SLEW--\r\n"), @nameStr, cogid(), targetUSec, bAtTargetStatus)
     else
         bAtTargetStatus := TRUE ' if not slewing, we are at desired target
 
 PUB isActive() : bActiveStatus
     '' Return T/F where T means that servo is in USE (does know its last position)
-    bActiveStatus := (readPosition(M_USECS) <> SERVO_POSITION_NOT_SET)
+    bActiveStatus := (currPosnUSec <> SERVO_POSITION_NOT_SET)
 
-PUB writePosition(mode, value) | bHaveHardware, bIsValidMode, currValue
+PUB writePosition(mode, value) | bHaveHardware, bIsValidMode, currValue, bIsActive
     '' Update servo
     '' -- {mode} is M_ANGLE, M_USECS or 0 (M_NOT_SET)
     '' -- {value} is desired position angle[0-180], uSec[600-2400]
@@ -225,12 +228,15 @@ PUB writePosition(mode, value) | bHaveHardware, bIsValidMode, currValue
     bIsValidMode := isValidMode(mode)
     if (bHaveHardware && bIsValidMode)
         currValue := readPosition(mode) ' returns SERVO_POSITION_NOT_SET if servo not yet positioned first time
-        if currValue <> value
+        if currValue <> value ' (currValue of SERVO_POSITION_NOT_SET - won't match either!)
             if bShowDebug
-                term.fstr2(string("+ writePosition(%s) [%s]\r\n"), interpModeValue(mode, value), @nameStr)
-            uSecPosn, degrPosn := positionInLimits(mode, value)
+                term.fstr3(string("+ writePosition(%s) [%s] Cg%d\r\n"), interpModeValue(mode, value), @nameStr, cogid())
+            currPosnUSec, currPosnDegr := positionInLimits(mode, value)
+            if targetUSec == SERVO_POSITION_NOT_SET
+                targetUSec := currPosnUSec
+                targetDegr := currPosnDegr
             pca9685.enableDebug(bShowDebug)
-            pca9685.gotoMicroSec(channel, uSecPosn)                             ' update servo
+            pca9685.gotoMicroSec(channel, currPosnUSec)                             ' update servo
 
 PUB readPosition(mode) : result | bHaveHardware, bIsValidMode
     '' Return the current servo Position in {mode} units
@@ -239,9 +245,9 @@ PUB readPosition(mode) : result | bHaveHardware, bIsValidMode
     bIsValidMode := isValidMode(mode)
     if (bHaveHardware && bIsValidMode)
         if (mode == M_ANGLE)
-            result := degrPosn
+            result := currPosnDegr
         else
-            result := uSecPosn
+            result := currPosnUSec
     if bShowDebug
         if result == SERVO_POSITION_NOT_SET
             term.fstr2(string("+ readPosition([%s] MODE %d) = SERVO_POSITION_NOT_SET\r\n"), @nameStr, mode)
@@ -260,6 +266,7 @@ DAT  { mode formatting strings }
 
 usMsg BYTE    "uSec",0
 degrMsg BYTE    "degr",0
+notSetMsg BYTE    "{mode notSet}",0
 
 VAR { mode formatting vars }
 
@@ -269,30 +276,36 @@ VAR { mode formatting vars }
 PRI interpModeValue(mode, value) : pInterpStr | bValidMode, byteIndex, pDigitStr, valUSec, valDegr
     pInterpStr := @modeStr
     byte [@modeStr][0] := 0     ' space
-    bValidMode := isValidMode(mode)
-    if bValidMode
-        valUSec, valDegr := positionInLimits(mode, value)
+    if mode == M_NOT_SET
         byteIndex := 0
-        pDigitStr := nstr.itoa(valUSec, 10, 0)
-        byteIndex += strcpy(@byte [@modeStr][byteIndex], pDigitStr)
-        byte [@modeStr][byteIndex++] := $20     ' space
-        byteIndex += strcpy(@byte [@modeStr][byteIndex], @usMsg)
-        byte [@modeStr][byteIndex++] := $20     ' space
-        byte [@modeStr][byteIndex++] := $28     ' open paren
-        pDigitStr := nstr.itoa(valDegr, 10, 0)
-        byteIndex += strcpy(@byte [@modeStr][byteIndex], pDigitStr)
-        byte [@modeStr][byteIndex++] := $20     ' space
-        byteIndex += strcpy(@byte [@modeStr][byteIndex], @degrMsg)
-        byte [@modeStr][byteIndex++] := $29     ' close paren
-        byte [@modeStr][byteIndex++] := 0     ' string terminator
+        byteIndex += strcpy(@byte [@modeStr][byteIndex], @notSetMsg)
+        byte [@modeStr][byteIndex++] := $0     ' space
     else
-        term.fstr2(string("+ interpModeValue(Mode %d, Value %d) BAD MODE!\r\n"), mode, value)
+        bValidMode := isValidMode(mode)
+        if bValidMode
+            valUSec, valDegr := positionInLimits(mode, value)
+            byteIndex := 0
+            pDigitStr := nstr.itoa(valUSec, 10, 0)
+            byteIndex += strcpy(@byte [@modeStr][byteIndex], pDigitStr)
+            byte [@modeStr][byteIndex++] := $20     ' space
+            byteIndex += strcpy(@byte [@modeStr][byteIndex], @usMsg)
+            byte [@modeStr][byteIndex++] := $20     ' space
+            byte [@modeStr][byteIndex++] := $28     ' open paren
+            pDigitStr := nstr.itoa(valDegr, 10, 0)
+            byteIndex += strcpy(@byte [@modeStr][byteIndex], pDigitStr)
+            byte [@modeStr][byteIndex++] := $20     ' space
+            byteIndex += strcpy(@byte [@modeStr][byteIndex], @degrMsg)
+            byte [@modeStr][byteIndex++] := $29     ' close paren
+            byte [@modeStr][byteIndex++] := 0     ' string terminator
+        else
+            term.fstr2(string("+ interpModeValue(Mode %d, Value %d) BAD MODE!\r\n"), mode, value)
 
 PRI strcpy(pDest, pSrc) : lenCopied
     lenCopied := strsize(pSrc)
     bytemove(pDest, pSrc, lenCopied)
 
 PRI isValidMode(mode) : bValidStatus
+    ' Return T/F where T means {mode} is valid
     bValidStatus := FALSE
     if (mode == M_ANGLE)
         bValidStatus := TRUE
@@ -304,7 +317,7 @@ PRI isValidMode(mode) : bValidStatus
 PRI hardwareConfigured(callerIDMsg) : bIsConfigured
     bIsConfigured := bChannelSpecified
     if NOT bChannelSpecified
-        term.fstr1(string("+ %s() ERROR Channel NOT configured\r\n"), callerIDMsg)
+        term.fstr2(string("+ %s() ERROR Channel[%s] NOT configured\r\n"), callerIDMsg, @nameStr)
 
 PRI convertPosition(inMode, inValue, outMode) : outValue | bIsValidMode, tmpDegr, tmpUSec
     bIsValidMode := isValidMode(inMode)
@@ -326,7 +339,7 @@ PRI positionInLimits(mode, value) : retUSec, retDegr
         'term.fstr4(string("+ positionInLimits(ANGLE[%d], VAL %d) --> uSec %d, angle %d\r\n"), mode, value, retUSec, retDegr)
     elseif (mode == M_USECS)
         retUSec := uSecMinimum #> value <# uSecMaximum                 ' legal microseconds
-        retDegr := us2Angle(retUSec)                                  ' convert to degrPosn
+        retDegr := us2Angle(retUSec)                                  ' convert to currPosnDegr
         'term.fstr4(string("+ positionInLimits(uSec[%d], VAL %d) --> uSec %d, angle %d\r\n"), mode, value, retUSec, retDegr)
     else
         term.fstr2(string("+ positionInLimits(MODE %d, VAL %d) ERROR Bad MODE!\r\n"), mode, value)
@@ -340,19 +353,19 @@ PRI setServoDefaults()
         servoType := ST_STANDARD
         bHaveLimits := TRUE
 
-PRI angle2us(degr) : uSecPosn | validDegr
+PRI angle2us(degr) : posnUSec | validDegr
     ' convert degrees to uSecs
     validDegr := 0 #> degr <# 180                           ' legal degrees
     ' map our number of degrees to uSec time
-    uSecPosn := map(validDegr, 0, 180, uSecMinimum, uSecMaximum)
-    'term.fstr4(string("+ angle2us(%d degr) --> %d uSec [uSec min:%d, max:%d]\r\n"), validDegr, uSecPosn, uSecMinimum, uSecMaximum)
+    posnUSec := map(validDegr, 0, 180, uSecMinimum, uSecMaximum)
+    'term.fstr4(string("+ angle2us(%d degr) --> %d uSec [uSec min:%d, max:%d]\r\n"), validDegr, posnUSec, uSecMinimum, uSecMaximum)
 
-PRI us2Angle(uSecs) : degrPosn | validUs
+PRI us2Angle(uSecs) : posnDegr | validUs
     ' convert uSecs to degrees
     validUs := uSecMinimum #> uSecs <# uSecMaximum          ' legal microseconds
     ' map our uSec time to number of degrees
-    degrPosn := map(validUs, uSecMinimum, uSecMaximum, 0, 180)
-    'term.fstr4(string("+ us2Angle(uSec %d) --> %d degr [uSec min:%d, max:%d]\r\n"), validUs, degrPosn, uSecMinimum, uSecMaximum)
+    posnDegr := map(validUs, uSecMinimum, uSecMaximum, 0, 180)
+    'term.fstr4(string("+ us2Angle(uSec %d) --> %d degr [uSec min:%d, max:%d]\r\n"), validUs, posnDegr, uSecMinimum, uSecMaximum)
 
 PRI map(inValue,  inMin,  inMax,  outMin,  outMax) : outValue
 {
