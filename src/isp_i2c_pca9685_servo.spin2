@@ -44,6 +44,9 @@ VAR
     LONG    targetUSec                                         ' valid only during slew
     LONG    targetDegr                                         ' valid only during slew
 
+    LONG    bLastAtTargetStatus
+
+
     BYTE    bChannelSpecified                                   ' true when servo-channel is set up
     BYTE    bStopped
     BYTE    bShowDebug
@@ -76,7 +79,7 @@ PUB init(chan, mode, value, pNameStr) | bValidMode, nameLen
     bHaveSavedDebug := FALSE
     targetUSec := SERVO_POSITION_NOT_SET
     targetDegr := SERVO_POSITION_NOT_SET
-
+    bLastAtTargetStatus := -2   ' value can't happen
 
     bytefill(@nameStr, 0, MAX_SERVO_NAME_CHARS + 1)
     byte [@nameStr][0] := chan + $30    ' add ASCII bias
@@ -161,19 +164,23 @@ PUB setSlewSteps(newSlewStepCount) | valSlewSteps, slewRateInUSec
     slewRateInUSec := (uSecMaximum - uSecMinimum) / valSlewSteps
     setSlewRate(slewRateInUSec)
 
-PUB slewToPostion(mode, value) | bHaveHardware, bIsValidMode, currUSec, deltaUSec, intermediateTarget
+PUB slewToPostion(mode, value) | bHaveHardware, bIsValidMode, tmpTargetUSec, tmpTargetDegr, bValueChanged
     '' Start slew of servo to desired target position
     bHaveHardware := hardwareConfigured(string("slewToPostion"))
     bIsValidMode := isValidMode(mode)
     if (bHaveHardware && bIsValidMode)
-        if bShowDebug
-            term.fstr2(string("+ slewToPostion(%s) [%s])\r\n"), interpModeValue(mode, value), @nameStr)
         ' now that slew can be called while slewing only save if NOT saved
+        tmpTargetUSec, tmpTargetDegr := positionInLimits(mode, value)
+        bValueChanged := targetUSec <> tmpTargetUSec ? TRUE : FALSE
+        if bValueChanged
+            if bShowDebug
+                term.fstr3(string("+ slewToPostion(%s) [%s] Cg%d)\r\n"), interpModeValue(mode, value), @nameStr, cogid())
+            targetUSec := tmpTargetUSec
+            targetDegr := tmpTargetDegr
+
         if NOT bHaveSavedDebug
             saveDebug()
         bShowDebug := FALSE
-        targetUSec, targetDegr := positionInLimits(mode, value)
-
 
 PUB continueSlew() : bAtTargetStatus | bHaveHardware, bIsValidTarget, deltaUSec, intermediateTargetUSec, bSlewComplete
     '' Continue slew to target position ... to final target or just next increment
@@ -205,16 +212,19 @@ PUB continueSlew() : bAtTargetStatus | bHaveHardware, bIsValidTarget, deltaUSec,
             restoreDebug()
             term.fstr2(string("+ continueSlew() [%s] Cg%d  DONE\r\n"), @nameStr, cogid())
 
-PUB isAtPostion() : bAtTargetStatus | bHaveHardware, bIsActive
+PUB isAtPostion() : bAtTargetStatus | bHaveHardware, bIsActive, bValueChanged
     '' Return T/F where T means this servo is at desired target position
     bHaveHardware := hardwareConfigured(string("isAtPostion"))
     bIsActive := isActive()
+    bAtTargetStatus := TRUE ' if servo not yet positioned
     if (bHaveHardware && bIsActive)
         bAtTargetStatus := (currPosnUSec == targetUSec) ? TRUE : FALSE
-        if bShowDebug && bAtTargetStatus == FALSE && targetUSec <> SERVO_POSITION_NOT_SET
+        bValueChanged := bLastAtTargetStatus <> bAtTargetStatus
+        if bValueChanged
+            bLastAtTargetStatus := bAtTargetStatus
+        'if bShowDebug && bAtTargetStatus == FALSE && targetUSec <> SERVO_POSITION_NOT_SET
+        if bShowDebug && targetUSec <> SERVO_POSITION_NOT_SET && bValueChanged
             term.fstr4(string("+ isAtPostion() [%s] Cg%d, target %d == %d  --SLEW--\r\n"), @nameStr, cogid(), targetUSec, bAtTargetStatus)
-    else
-        bAtTargetStatus := TRUE ' if not slewing, we are at desired target
 
 PUB isActive() : bActiveStatus
     '' Return T/F where T means that servo is in USE (does know its last position)
@@ -254,6 +264,14 @@ PUB readPosition(mode) : result | bHaveHardware, bIsValidMode
         'else
         '    term.fstr2(string("+ readPosition([%s]) [%s]\r\n"), @nameStr, interpModeValue(mode, result))
 
+PUB getPosition() : retUSec, retDegr
+    '' Return the current servo Position in {USec} and {Degr} units
+    retUSec := currPosnUSec
+    retDegr := currPosnDegr
+
+PUB showPosition()
+    '' Display the current servo Position in {USec} and {Degr} units
+    term.fstr3(string("-->  [%s]  %d uSec (%d degr)\r\n"), @nameStr, currPosnUSec, currPosnDegr)
 
 PUB mapValueToServoPosnInUSec(inValue,  inMin,  inMax) : valueInUSec
     '' map given value of range(min, max) to servo range

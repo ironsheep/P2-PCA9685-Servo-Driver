@@ -35,7 +35,7 @@ con
   #0, CTL_NADA, CTL_RT_JOY_HZ, CTL_RT_JOY_VT  ' 251 - 1024ish - 1807
   #3, CTL_LT_JOY_VT, CTL_LT_JOY_HZ  ' 251 - 1024ish - 1783
   #5, CTL_VRA, CTL_VRB
-  #7, CTL_SW_A, CTL_SW_b, CTL_SW_C, CTL_SW_D
+  #7, CTL_SW_A, CTL_SW_B, CTL_SW_C, CTL_SW_D
 
 ' number of controls for which we track min/max range
   MAX_CTLS = CTL_SW_D + 1
@@ -61,19 +61,32 @@ dat
     ctlMaxValue     word    0, 1807, 1801, 1766, 1786, 1807
                     word    1807, 1807, 1807, 1807, 1807
 
+    bShowDebug      BYTE    FALSE
+
 PUB null()
     '' This is not a top-level object
 
-pub setup()
+pub setup() : cog
     '' Configure IO and objects for application
-    sbus.start(SBUS_RX, @Defaults)                                ' start s.bus rx
+    cog := sbus.start(SBUS_RX, @Defaults)                                ' start s.bus rx
     waitms(250)
     show_sbus()
+
+PUB showDebug(bEnable)
+    if bEnable <> TRUE
+        bEnable := FALSE
+    if bShowDebug <> bEnable
+        if not bEnable
+            term.fstr1(string("- showDebug(%d) - now OFF\r\n"), bEnable)
+        else
+            term.fstr1(string("- showDebug(%d) - now ON\r\n"), bEnable)
+    bShowDebug := bEnable
 
 PUB readChannel(chan) : retValue | validChan
     validChan := 1 #> chan <# MAX_CHANNELS                      ' legal SBUS Rcvr channel
     retValue := sbus.read(validChan)                        ' get value from receiver [0-2047]
-    'term.fstr2(string("- readChannel(%d) - %d\r\n"), chan, retValue)
+    if bShowDebug
+        term.fstr2(string("- readChannel(%d) - %d\r\n"), chan, retValue)
 
 PUB swIsOn(swChan) : bOnState
     '' Return T/F where T = switch is ON [swA, swB, swC, swD]
@@ -93,18 +106,20 @@ PUB readSwitch(swChan) : eSwState | validSwChan
     if validSwChan == CTL_SW_C   ' if 3-way sw don't allow it
         return readSw3Way(swChan)
     else
-        eSwState := readChannel(validSwChan) > 1023 ? SST_ON : SST_OFF
-        'term.fstr2(string("- readSwitch(%d) - %d\r\n"), validSwChan, eSwState)
+        eSwState := readChannel(validSwChan) > 1023 ? SST_OFF : SST_ON
+    if bShowDebug
+        term.fstr2(string("- readSwitch(%d) - %d\r\n"), validSwChan, eSwState)
 
 PUB readSw3Way(swChan) : eSwState | validSwChan, rawValue
     '' Read 3-pos switch value and decode into switch state
     validSwChan := CTL_SW_C #> swChan <# CTL_SW_C                                ' legal SBUS Rxcvr channel
     rawValue := readChannel(validSwChan)
     if rawValue < 684   ' bottom 3rd of 0-2047
-        eSwState := SST_OFF
+        eSwState := SST_ON
     else
-        eSwState := rawValue < 1367 ? SST_MID : SST_ON ' bottom 2/3 rds or top 3rd?
-    term.fstr2(string("- readSw3Way(%d) - %d\r\n"), validSwChan, eSwState)
+        eSwState := rawValue < 1367 ? SST_MID : SST_OFF ' bottom 2/3 rds or top 3rd?
+    if bShowDebug
+        term.fstr2(string("- readSw3Way(%d) - %d\r\n"), validSwChan, eSwState)
 
 
 pub show_sbus() | ch, pos, x, y

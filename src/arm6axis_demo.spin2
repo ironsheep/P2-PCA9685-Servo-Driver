@@ -65,7 +65,8 @@ OBJ { our objects }
 
 
 VAR
-    long    cog
+    long    armCog
+    long    remoteCog
 
 PUB main() | statusOK, index
     '' Main entry point of PCA9685 demo
@@ -74,20 +75,24 @@ PUB main() | statusOK, index
     quietController() ' set pins to output low... so we can set LA trigger
     wait_for_terminal(false)
 
-    remoteCtl.setup()
 
     ' ---- TEST TEST TEST ----
     'remoteCtl.manualCalibrate()
     'term.fstr0(string("\r\n-- HOLD --\r\n"))
     'repeat  ' hold here for now
     ' ---- TEST TEST TEST ----
+    armCog := arm.start(PCA9685_SCL, PCA9685_SDA, PCA9685_OE)
+    if armCog
+        term.fstr1(string("-- ARM COG #%d --\r\n"), armCog - 1)
 
     {
     ' ----------- drive arm using controller - showing positions always
-    if statusOK
-        term.fstr0(string("arm remote control\r\n"))
-        resetServoController(statusOK)
-        remoteControlArm()
+    'if statusOK
+    term.fstr0(string("arm remote control\r\n"))
+    remoteCog := remoteCtl.setup()
+    statusOK := remoteCog <> 0 ? TRUE : FALSE
+    resetServoController(statusOK)
+    remoteControlArm()
     '}
     '{
     ' ----------- run arm thru positions and stop
@@ -95,70 +100,130 @@ PUB main() | statusOK, index
         term.fstr0(string("demo()\r\n"))
         resetServoController(statusOK)
         demo()
+        waitms(30000)
     '}
 
-    waitms(30000)
     tearDown()  ' stop any cogs, if needed
     term.fstr0(string("\r\nDone\r\n"))
 
-PUB remoteControlArm() | bIsJawOpen, bLastJawOpenState, cog
-    cog := arm.start(PCA9685_SCL, PCA9685_SDA, PCA9685_OE)
-    if cog <> -1
-        term.fstr1(string("-- ARM COG #%d --\r\n"), cog)
-        arm.gripClosed()
+PUB remoteControlArm() | bLastIgnoreJoyStks, bIgnoreJoySticks, eLastJawState, eJawStateSW, bDoneTesting, bLastShowState, bShowState, loopCt, bShowDebugStatus
 
-        bLastJawOpenState := -2 ' value can't happen
-        repeat 120
+        waitms(3000)    ' wait for 3 sec for backend to catch up
+
+        'arm.gripClosed()
+        term.fstr0(string("\r\n------------\r\n"))
+        term.fstr0(string("* swA DN    - enable joystick servo control\r\n"))
+        term.fstr0(string("* swB Toggle - show servo positions\r\n"))
+        term.fstr0(string("* swC UP - close jaw\r\n"))
+        term.fstr0(string("* swC MID - partial open jaw\r\n"))
+        term.fstr0(string("* swC DN - open jaw\r\n"))
+        term.fstr0(string("* swD DN - end control\r\n"))
+        term.fstr0(string("------------\r\n\r\n"))
+
+        eLastJawState := -2 ' value can't happen
+        bLastShowState := -2 ' value can't happen
+        bLastIgnoreJoyStks := -2 ' value can't happen
+
+        loopCt := 0
+        repeat
+
+            bShowDebugStatus := loopCt < 2 ? TRUE : FALSE
+            remoteCtl.showDebug(bShowDebugStatus)
 
             ' SwA open/close JAW
-            bIsJawOpen := remoteCtl.swIsOff(remoteCtl.CTL_SW_A)
+            bIgnoreJoySticks := remoteCtl.swIsOn(remoteCtl.CTL_SW_A)
+            bShowState := remoteCtl.swIsOn(remoteCtl.CTL_SW_B)
+            eJawStateSW := remoteCtl.readSwitch(remoteCtl.CTL_SW_C)
+            bDoneTesting := remoteCtl.swIsOff(remoteCtl.CTL_SW_D)
 
-            if bIsJawOpen <> bLastJawOpenState
-                term.fstr1(string("- SW bIsJawOpen = %d\r\n"), bIsJawOpen)
-                term.fstr0(string("-- JAW act --\r\n"))
-                if bIsJawOpen
-                    arm.gripOpen()
+            if bLastShowState == -2
+                bLastShowState := bShowState
+
+            if bLastIgnoreJoyStks == -2
+                bLastIgnoreJoyStks := bIgnoreJoySticks
+
+            if bShowState <> bLastShowState
+                showServoPositions()
+                bLastShowState := bShowState
+
+            if eJawStateSW <> eLastJawState
+                term.fstr0(string("-- JAW change --\r\n"))
+                case eJawStateSW
+                    remoteCtl.SST_OFF:
+                        term.fstr0(string("  Jaw Open\r\n"))
+                        arm.gripOpen()
+                    remoteCtl.SST_MID:
+                        term.fstr0(string("  Jaw Mid-Open\r\n"))
+                        arm.gripMidOpen()
+                    remoteCtl.SST_ON:
+                        arm.gripClosed()
+                        term.fstr0(string("  Jaw Close\r\n"))
+                    other:
+                        term.fstr1(string("** ERROR  swC value=%d UNKNOWN\r\n"), eJawStateSW)
+                eLastJawState := eJawStateSW
+
+            if bLastIgnoreJoyStks <> bIgnoreJoySticks
+                if bIgnoreJoySticks
+                    term.fstr0(string("  SERVO CTL OFF\r\n"))
                 else
-                    arm.gripClosed()
-                bLastJawOpenState := bIsJawOpen
+                    term.fstr0(string("  SERVO CTL enabled\r\n"))
+                bLastIgnoreJoyStks := bIgnoreJoySticks
 
-            waitms(125)    ' wait 1/8 sec.
+            if not bIgnoreJoySticks
+                updPosnBothJoy(1)
 
-            updPosnBothJoy()
+            if bDoneTesting
+                term.fstr0(string("--> quit loop\r\n"))
+                quit
+
+            waitms(250) ' wait 1/4 second, before next loop
+            loopCt++
 
         ' done, reset arm
         arm.homeArm()
 
-PRI updPosnDAndRtJoy() | bServoGroupUpper, posn, rngMin, rngMax
+
+PRI showServoPositions()
+    term.fstr0(string("\r\n--- SERVOS ---\r\n"))
+    ' add code here
+    arm.showservoPositions()
+    term.fstr0(string("--------------\r\n\r\n"))
+
+PRI updPosnBothJoy(nLoopCount) | posn, rngMin, rngMax
+    ' loop on joysitck values forwarding them to our servos
+    if nLoopCount < 1
+        nLoopCount := 1
+    repeat nLoopCount
+        ' swD which servo pair?
+        ' route Rt Joystick Vt to Wrist Rotate
+        posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_VT)
+        rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_VT)
+        arm.positionServo(arm.SERVO_WRIST_ROTATE, posn, rngMin, rngMax)
+
+        ' route Rt Joystick Hz to Wrist Flex
+        posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_HZ)
+        rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_HZ)
+        arm.positionServo(arm.SERVO_WRIST_FLEX, posn, rngMin, rngMax)
+
+        ' route Lt Joystick Hz (spring center) to Shoulder
+        posn := remoteCtl.readChannel(remoteCtl.CTL_LT_JOY_VT)
+        rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_LT_JOY_VT)
+        arm.positionServo(arm.SERVO_SHOULDER, posn, rngMin, rngMax)
+
+        ' route Lt Joystick Vt to Elbow
+        posn := remoteCtl.readChannel(remoteCtl.CTL_LT_JOY_HZ)
+        rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_LT_JOY_HZ)
+        arm.positionServo(arm.SERVO_ELBOW, posn, rngMin, rngMax)
+
+
+PRI updPosnDAndRtJoy(nLoopCount) | bServoGroupUpper, posn, rngMin, rngMax
 ' loop on joysitck values forwarding them to our servos
-        repeat 7
-            ' swD which servo pair?
-            bServoGroupUpper := remoteCtl.swIsOff(remoteCtl.CTL_SW_D)
-            if bServoGroupUpper
-                ' route Rt Joystick Vt to Wrist Rotate
-                posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_VT)
-                rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_VT)
-                arm.positionServo(arm.SERVO_WRIST_ROTATE, posn, rngMin, rngMax)
-
-                ' route Rt Joystick Hz to Wrist Flex
-                posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_HZ)
-                rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_HZ)
-                arm.positionServo(arm.SERVO_WRIST_FLEX, posn, rngMin, rngMax)
-            else
-                ' route Rt Joystick Vt to Elbow
-                posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_VT)
-                rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_VT)
-                arm.positionServo(arm.SERVO_ELBOW, posn, rngMin, rngMax)
-
-                ' route Rt Joystick Hz to Shoulder
-                posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_HZ)
-                rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_HZ)
-                arm.positionServo(arm.SERVO_SHOULDER, posn, rngMin, rngMax)
-
-PRI updPosnBothJoy() | posn, rngMin, rngMax
-' loop on joysitck values forwarding them to our servos
-        repeat 7
-            ' swD which servo pair?
+    if nLoopCount < 1
+        nLoopCount := 1
+    repeat nLoopCount
+        ' swD which servo pair?
+        bServoGroupUpper := remoteCtl.swIsOff(remoteCtl.CTL_SW_D)
+        if bServoGroupUpper
             ' route Rt Joystick Vt to Wrist Rotate
             posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_VT)
             rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_VT)
@@ -168,21 +233,22 @@ PRI updPosnBothJoy() | posn, rngMin, rngMax
             posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_HZ)
             rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_HZ)
             arm.positionServo(arm.SERVO_WRIST_FLEX, posn, rngMin, rngMax)
+        else
+            ' route Rt Joystick Vt to Elbow
+            posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_VT)
+            rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_VT)
+            arm.positionServo(arm.SERVO_ELBOW, posn, rngMin, rngMax)
 
-            ' route Lt Joystick Hz (spring center) to Shoulder
-            posn := remoteCtl.readChannel(remoteCtl.CTL_LT_JOY_VT)
-            rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_LT_JOY_VT)
+            ' route Rt Joystick Hz to Shoulder
+            posn := remoteCtl.readChannel(remoteCtl.CTL_RT_JOY_HZ)
+            rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_HZ)
             arm.positionServo(arm.SERVO_SHOULDER, posn, rngMin, rngMax)
 
-            ' route Lt Joystick Vt to Elbow
-            posn := remoteCtl.readChannel(remoteCtl.CTL_LT_JOY_HZ)
-            rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_LT_JOY_HZ)
-            arm.positionServo(arm.SERVO_ELBOW, posn, rngMin, rngMax)
 
 PUB demo() | loopIndex
 
-    cog := arm.start(PCA9685_SCL, PCA9685_SDA, PCA9685_OE)
-    if cog <> -1
+    armCog := arm.start(PCA9685_SCL, PCA9685_SDA, PCA9685_OE)
+    if armCog <> 0
         'arm.gripOpen()
         term.fstr0(string("-- [ startup ] --\r\n"))
         waitms(1000)
