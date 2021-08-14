@@ -80,6 +80,14 @@ jm\_sbus_rx.spin2 | JonnyMac's SBus object | Basic SBus access routines
 
 - Work our way up from the hardware to the arm control to the scripting of the arm
 
+## My Arm hardware
+
+![My arm](images/arm-6-axis.jpg)
+
+**Figure 1 - My Arm - Grip, Wrist Spin, Wrist Flex, Elbow, Shoulder, Base**
+
+My arm wired with servos attached to pca9685 board (behind arm). Behind and to left of arm is JonnyMac experiment board with P2 Edge module. The pca9685 is wired via I2C to the P2. just down from the JohnnyMac board is the FlySky servo receiver which is also wired to the JohnnyMac board.
+
 ## Arm hardware from Amazon
 
 - ~ $41 No Servos [diymore Silver ROT3U 6DOF Aluminium Robot Arm Mechanical Robotic Clamp Claw Kits (Unassembled Parts Without Servos)](https://www.amazon.com/diymore-Aluminium-Mechanical-Robotic-Arduino/dp/B01LW0LUPT)
