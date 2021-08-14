@@ -61,7 +61,7 @@ OBJ { our objects }
 
     arm             : "isp_arm_6axis"                           ' the arm itself
     term            : "isp_serial_singleton"                 ' terminal output
-    remoteCtl       : "isp_sbus_rx"                             ' the FlySky Transmitter
+    remoteCtl       : "isp_flysky_rx"                             ' the FlySky Transmitter
 
 
 VAR

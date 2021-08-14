@@ -1,7 +1,7 @@
 '' =================================================================================================
 ''
-''   File....... isp_sbus_rx.spin2
-''   Purpose.... Interface to FlySky SBus Receiver (SINGLETON)
+''   File....... isp_flysky_rx.spin2
+''   Purpose.... Interface to FlySky - it's SBus Receiver (SINGLETON)
 ''   Authors.... Stephen M Moraco
 ''               -- Copyright (c) 2021 Iron Sheep Productions, LLC
 ''               -- see below for terms of use

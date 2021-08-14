@@ -18,6 +18,8 @@ And as I started in on this I also decided to use JonnyMac's FlySky SBUS support
 **Latest Repo Updates**:
 
 ```
+14 Aug 2021 16:36
+- Updated this readme with info about files in this repo
 20 Jul 2021 16:16
 - Moved to separate COG control of servo-slew for smooth arm movements
 06 Jul 2021 17:52
@@ -34,6 +36,45 @@ And as I started in on this I also decided to use JonnyMac's FlySky SBUS support
 ## Current status
 
 I'm working on position placement using FlySky then getting servo position readouts when I get to a desired ARM configuration.  Figuring out the puposes of the FlySky controls for this use case is proving to be quite interesting...
+
+### Current Compile Structure
+
+Files are compiled as follows:
+
+```
+arm6axis_demo.spin2
+|-isp_arm_6axis.spin2
+|-|-isp_i2c_pca9685.spin2
+|-|-|-isp_i2c_singleton.spin2
+|-|-|-|-isp_serial_singleton.spin2
+|-|-|-|-|-jm_nstr.spin2
+|-|-|-isp_serial_singleton.spin2
+|-|-isp_i2c_pca9685_servo.spin2
+|-|-|-isp_i2c_pca9685.spin2
+|-|-|-isp_serial_singleton.spin2
+|-|-|-jm_nstr.spin2
+|-|-isp_serial_singleton.spin2
+|-isp_serial_singleton.spin2
+|-isp_flysky_rx.spin2
+|-|-jm_sbus_rx.spin2
+|-|-|-isp_serial_singleton.spin2
+|-|-isp_serial_singleton.spin2
+```
+
+### Files of Interest
+
+Filename | Purpose | Notes
+----- | ----- | -----
+arm6axis_demo.spin2 | Top Level file | Demo routines, vairous bring up routines as we develop this code
+isp\_arm_6axis.spin2 | Arm Control routines | (1) knows of arm servos and range of each, (2) contains task for slewing all servos (runs in separate Cog)
+isp\_i2c_pca9685.spin2 | pc9685 object | all routes to interact with pca9685
+isp\_i2c\_pca9685_servo.spin2 | servo object | servo routines which know servo is attached to channel of pca9685
+isp\_i2c_singleton.spin2 | singleton i2c object | jm_i2c object reshaped as singleton
+isp\_flysky_rx.spin2 | FlySky methods object (wrapper for SBus object) | New upper level routines providing FlySky control-centric methods
+isp\_serial_singleton.spin2 | singleton serial object | jm_serial object reshaped as singleton
+jm_nstr.spin2 | JonnyMac's string formatter object | 
+jm\_sbus_rx.spin2 | JonnyMac's SBus object | Basic SBus access routines
+
 
 ## Up Next
 
