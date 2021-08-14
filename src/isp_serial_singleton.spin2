@@ -1,14 +1,16 @@
 '' =================================================================================================
 ''
-''   File....... isp_jm_serial_singleton.spin2
+''   File....... isp_serial_singleton.spin2
+''               Orignal jm_serial.spin2 made into singleton by Stephen M Moraco
 ''   Purpose.... True mode, unbuffererd serial coms using smart pins
 ''               -- same features as original P1 FDS with minor enhancements/changes
 ''               -- VAR content moved to DAT so we could share this singleton object across all objects in demo
-''   Authors.... Eric Smith, Chip Gracey, and Jon McPhalen (singleton adaptation by Stephen M. Moraco)
+''   Authors.... (jm_serial.spin2) Eric Smith, Chip Gracey, and Jon McPhalen
+''               (isp_serial_singleton.spin2) adaptation by Stephen M Moraco
 ''               -- see below for terms of use
 ''   E-mail..... stephen@ironsheep.biz
-''   Started....
-''   Updated.... 21 May 2021  by Stephen M. Moraco
+''   Started.... 28 Jun 2021
+''   Updated.... 14 Aug 2021
 ''
 '' =================================================================================================
 

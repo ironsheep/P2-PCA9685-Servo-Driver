@@ -54,7 +54,7 @@ OBJ { our objects }
 
     pwmController       : "isp_i2c_pca9685"                         ' backend servo controller (ensure task has access)
     servos[MAX_SERVOS]  : "isp_i2c_pca9685_servo"                   ' our six servos
-    term                : "isp_jm_serial_singleton"                 ' terminal output
+    term                : "isp_serial_singleton"                 ' terminal output
 
 VAR { TASK VARIABLES & Pins }
 
@@ -112,26 +112,26 @@ PUB homeArm()
     term.fstr0(string("** homeArm() EXIT\r\n\r\n"))
 
 
-PUB demoPositions(loopCt) | moValue, bDidMove
+PUB demoPositions(loopCt) | eArmPosition, bDidMove
     '' demo all defined postions in loop, {loopCt} times
     term.fstr1(string("** demoPositions(%d)\r\n"), loopCt)
     if loopCt < 1
         loopCt := 1
 
     repeat loopCt
-        repeat moValue from MO_ELBO to MO_ARM_CANTELEVER_B
-            bDidMove := positionArm(moValue)
+        repeat eArmPosition from MO_ELBO to MO_ARM_CANTELEVER_B
+            bDidMove := positionArm(eArmPosition)
             if bDidMove
                 waitms(3000)   ' hold for 3 secs
 
     homeArm()
 
 
-PRI positionArm(moVar) : bDidMove
+PRI positionArm(eArmPosition) : bDidMove
     '' tell arm to move to specific position
     bDidMove := FALSE
     '#0, MO_NONE, MO_ELBO, MO_VERTICAL, MO_BOT_DOWN, MO_TOP_DOWN, MO_RT_DOWN, MO_FRONT_DOWN, MO_LT_DOWN, MO_BACK_DOWN, MO_ARM_CANTELEVER_F, MO_ARM_CANTELEVER_B
-    case moVar
+    case eArmPosition
         MO_ELBO:
             'armFlatForwardYellowUp()
             'bDidMove := TRUE

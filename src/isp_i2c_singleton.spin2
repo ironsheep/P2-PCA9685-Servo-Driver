@@ -1,13 +1,13 @@
 '' =================================================================================================
 ''
-''   File....... isp_jm_i2c_singleton.spin2
+''   File....... isp_i2c_singleton.spin2
 ''   Purpose.... Low-level I2C routines for the P2
-''   Author..... Jon "JonnyMac" McPhalen
-''               Copyright (c) 2020 Jon McPhalen
+''   Author..... Stephen M Moraco adapts jm_i2c.spin2 to be a singleton object
+''               Copyright (c) 2021 Stephen M Moraco
 ''               -- see below for terms of use
-''   E-mail..... jon.mcphalen@gmail.com
-''   Started....
-''   Updated.... 28 SEP 2020
+''   E-mail..... stephen@ironsheep.biz
+''   Started.... 28 Jun 2021
+''   Updated.... 14 Aug 2021
 ''
 '' =================================================================================================
 
@@ -38,7 +38,7 @@ con
   MAX_LOG_ENTRIES = 30
 
 OBJ
-    term                : "isp_jm_serial_singleton"                 ' terminal output
+    term                : "isp_serial_singleton"                 ' terminal output
 
 {
 VAR

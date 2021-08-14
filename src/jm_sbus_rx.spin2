@@ -68,7 +68,7 @@ con
   POS_CTR = (POS_MAX - POS_MIN) >> 1
 
 OBJ
-    term                : "isp_jm_serial_singleton"                 ' terminal output
+    term                : "isp_serial_singleton"                 ' terminal output
 
 var
 

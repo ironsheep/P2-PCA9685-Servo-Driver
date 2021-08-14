@@ -44,7 +44,7 @@ obj
 
 '    main                                                       ' * master Spin cog
     sbus    : "jm_sbus_rx"                                      ' * s.bus serial input/decoding
-    term    : "isp_jm_serial_singleton"                         ' debug terminal output
+    term    : "isp_serial_singleton"                         ' debug terminal output
 
 ' * uses cog when loaded
 
