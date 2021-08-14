@@ -88,7 +88,7 @@ jm\_sbus_rx.spin2 | JonnyMac's SBus object | Basic SBus access routines
 
 My arm wired with servos attached to pca9685 board (behind arm). Behind and to left of arm is JonnyMac experiment board with P2 Edge module. The pca9685 is wired via I2C to the P2. just down from the JohnnyMac board is the FlySky servo receiver which is also wired to the JohnnyMac board.
 
-![pca9685 board](images/pca9685 brd.jpg)
+![pca9685 board](images/pca9685brd.jpg)
 
 **Figure 2 - pca9685 board providing PWM to all servo channels**
 
