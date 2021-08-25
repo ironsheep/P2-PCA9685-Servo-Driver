@@ -164,9 +164,9 @@ PUB setSlewSteps(newSlewStepCount) | valSlewSteps, slewRateInUSec
     slewRateInUSec := (uSecMaximum - uSecMinimum) / valSlewSteps
     setSlewRate(slewRateInUSec)
 
-PUB slewToPostion(mode, value) | bHaveHardware, bIsValidMode, tmpTargetUSec, tmpTargetDegr, bValueChanged
+PUB slewToPosition(mode, value) | bHaveHardware, bIsValidMode, tmpTargetUSec, tmpTargetDegr, bValueChanged
     '' Start slew of servo to desired target position
-    bHaveHardware := hardwareConfigured(string("slewToPostion"))
+    bHaveHardware := hardwareConfigured(string("slewToPosition"))
     bIsValidMode := isValidMode(mode)
     if (bHaveHardware && bIsValidMode)
         ' now that slew can be called while slewing only save if NOT saved
@@ -174,9 +174,12 @@ PUB slewToPostion(mode, value) | bHaveHardware, bIsValidMode, tmpTargetUSec, tmp
         bValueChanged := targetUSec <> tmpTargetUSec ? TRUE : FALSE
         if bValueChanged
             if bShowDebug
-                term.fstr3(string("+ slewToPostion(%s) [%s] Cg%d)\r\n"), interpModeValue(mode, value), @nameStr, cogid())
+                term.fstr3(string("+ slewToPosn(%s) [%s] Cg%d)\r\n"), interpModeValue(mode, value), @nameStr, cogid())
             targetUSec := tmpTargetUSec
             targetDegr := tmpTargetDegr
+        else
+            if bShowDebug
+                term.fstr3(string("+   -at-Postion(%s) [%s] Cg%d)\r\n"), interpModeValue(mode, value), @nameStr, cogid())
 
         if NOT bHaveSavedDebug
             saveDebug()
@@ -240,7 +243,7 @@ PUB writePosition(mode, value) | bHaveHardware, bIsValidMode, currValue, bIsActi
         currValue := readPosition(mode) ' returns SERVO_POSITION_NOT_SET if servo not yet positioned first time
         if currValue <> value ' (currValue of SERVO_POSITION_NOT_SET - won't match either!)
             if bShowDebug
-                term.fstr3(string("+ writePosition(%s) [%s] Cg%d\r\n"), interpModeValue(mode, value), @nameStr, cogid())
+                term.fstr3(string("+ writePosn(%s) [%s] Cg%d\r\n"), interpModeValue(mode, value), @nameStr, cogid())
             currPosnUSec, currPosnDegr := positionInLimits(mode, value)
             if targetUSec == SERVO_POSITION_NOT_SET
                 targetUSec := currPosnUSec
@@ -260,9 +263,9 @@ PUB readPosition(mode) : result | bHaveHardware, bIsValidMode
             result := currPosnUSec
     if bShowDebug
         if result == SERVO_POSITION_NOT_SET
-            term.fstr2(string("+ readPosition([%s] MODE %d) = SERVO_POSITION_NOT_SET\r\n"), @nameStr, mode)
+            term.fstr2(string("+ readPosn([%s] MODE %d) = SERVO_POSITION_NOT_SET\r\n"), @nameStr, mode)
         'else
-        '    term.fstr2(string("+ readPosition([%s]) [%s]\r\n"), @nameStr, interpModeValue(mode, result))
+        '    term.fstr2(string("+ readPosn([%s]) [%s]\r\n"), @nameStr, interpModeValue(mode, result))
 
 PUB getPosition() : retUSec, retDegr
     '' Return the current servo Position in {USec} and {Degr} units
@@ -348,7 +351,7 @@ PRI convertPosition(inMode, inValue, outMode) : outValue | bIsValidMode, tmpDegr
             outValue := tmpUSec
     else
         if bShowDebug
-            term.fstr3(string("+ convertPosition(INMODE %d, VAL %d, OUTMODE %d) ERROR Bad Parameter!\r\n"), inMode, inValue, outMode)
+            term.fstr3(string("+ convertPosn(INMODE %d, VAL %d, OUTMODE %d) ERROR Bad Param!\r\n"), inMode, inValue, outMode)
 
 PRI positionInLimits(mode, value) : retUSec, retDegr
     if (mode == M_ANGLE)

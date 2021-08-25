@@ -72,36 +72,38 @@ PUB main() | statusOK, index
     '' Main entry point of PCA9685 demo
     setup_terminal()
 
+    statusOK := FALSE
+    arm.init(PCA9685_SCL, PCA9685_SDA, PCA9685_OE)
     quietController() ' set pins to output low... so we can set LA trigger
     wait_for_terminal(false)
 
-
-    ' ---- TEST TEST TEST ----
-    'remoteCtl.manualCalibrate()
-    'term.fstr0(string("\r\n-- HOLD --\r\n"))
-    'repeat  ' hold here for now
-    ' ---- TEST TEST TEST ----
     armCog := arm.start(PCA9685_SCL, PCA9685_SDA, PCA9685_OE)
     if armCog
-        term.fstr1(string("-- ARM COG #%d --\r\n"), armCog - 1)
+        term.fstr1(string("-- ARM Cg%d --\r\n"), armCog - 1)
+        statusOK := TRUE
 
-    {
-    ' ----------- drive arm using controller - showing positions always
-    'if statusOK
-    term.fstr0(string("arm remote control\r\n"))
-    remoteCog := remoteCtl.setup()
-    statusOK := remoteCog <> 0 ? TRUE : FALSE
-    resetServoController(statusOK)
-    remoteControlArm()
-    '}
-    '{
-    ' ----------- run arm thru positions and stop
-    if statusOK
-        term.fstr0(string("demo()\r\n"))
+        ' ---- TEST TEST TEST ----
+        'remoteCtl.manualCalibrate()
+        'term.fstr0(string("\r\n-- HOLD --\r\n"))
+        'repeat  ' hold here for now
+        ' ---- TEST TEST TEST ----
+        {
+        ' ----------- drive arm using controller - showing positions always
+        'if statusOK
+        term.fstr0(string("arm remote control\r\n"))
+        remoteCog := remoteCtl.setup()
+        statusOK := remoteCog <> 0 ? TRUE : FALSE
         resetServoController(statusOK)
-        demo()
-        waitms(30000)
-    '}
+        remoteControlArm()
+        '}
+        '{
+        ' ----------- run arm thru positions and stop
+        if statusOK
+            term.fstr0(string("demo()\r\n"))
+            resetServoController(statusOK)
+            demo()
+            waitms(30000)
+        '}
 
     tearDown()  ' stop any cogs, if needed
     term.fstr0(string("\r\nDone\r\n"))
@@ -247,7 +249,6 @@ PRI updPosnDAndRtJoy(nLoopCount) | bServoGroupUpper, posn, rngMin, rngMax
 
 PUB demo() | loopIndex
 
-    armCog := arm.start(PCA9685_SCL, PCA9685_SDA, PCA9685_OE)
     if armCog <> 0
         'arm.gripOpen()
         term.fstr0(string("-- [ startup ] --\r\n"))
@@ -260,18 +261,17 @@ PUB demo() | loopIndex
         term.fstr0(string("-- [ Demo arm moves ] --\r\n"))
         'arm.doServoSteps()
         arm.demoPositions(2)
+    else
+        term.fstr0(string("-- [ NO arm, ABORT ] --\r\n"))
 
 PRI quietController()
 
-    term.fstr0(string("Quiesce... <<  start the LA!  >>\r\n"))
+    'term.fstr0(string("Quiesce... <<  start the LA!  >>\r\n"))
     arm.quietController()
-
 
 PRI tearDown()
     ' stop anything that needs to be...
     arm.stop()    ' pull ourself off the i2c bus
-
-
 
 PRI resetServoController(ok)
     if(ok)

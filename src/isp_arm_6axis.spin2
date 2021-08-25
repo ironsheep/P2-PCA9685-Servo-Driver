@@ -52,7 +52,7 @@ CON { arm specifics }
 
 OBJ { our objects }
 
-    pwmController       : "isp_i2c_pca9685"                         ' backend servo controller (ensure task has access)
+    pca9685       : "isp_i2c_pca9685"                         ' backend servo controller (ensure task has access)
     servos[MAX_SERVOS]  : "isp_i2c_pca9685_servo"                   ' our six servos
     term                : "isp_serial_singleton"                 ' terminal output
 
@@ -69,7 +69,7 @@ pub null()
 
 '' This is not a top-level object
 
-pub start(pinSCL, pinSDA, pinOE) : cog
+pub start(pinSCL, pinSDA, pinOE) : retCog
     '' Start Servo Slew Controller cog after initializing Arm Servos
 
     '' Remember the output pins
@@ -78,35 +78,46 @@ pub start(pinSCL, pinSDA, pinOE) : cog
     pin_oe := pinOE
 
     ' return cog+1 (0 = no cog started)
-    cog := cogspin(NEWCOG, servoSlewTask(), @taskStack) + 1                 ' start s.bus rx/decode cog
+    cog := retCog := cogspin(NEWCOG, servoSlewTask(), @taskStack) + 1                 ' start s.bus rx/decode cog
     if cog
         '' configure controller then home all arm servos
         'term.fstr0(string("** start() ENTRY\r\n"))
 
         waitms(3000)   ' hold for 3 secs
 
-        term.fstr0(string("** start() SUCCESS\r\n"))
+        term.fstr1(string("** start() SUCCESS Cg%d\r\n"), retCog - 1)
     else
         term.fstr0(string("** start() FAILURE\r\n"))
 
-PUB stop()
+PUB init(pinSCL, pinSDA, pinOE)
+    '' Initialize the pca output pins (quiet the device so we can trigger LA)
 
+    '' Remember the output pins
+    pin_scl := pinSCL
+    pin_sda := pinSDA
+    pin_oe := pinOE
+
+    pca9685.init(pinSCL, pinSDA, pinOE)
+
+PUB stop()
+    '' stop any running back end cogs
     if cog                                                      ' if running
         cogstop(cog-1)                                              '  stop the cog
+        term.fstr1(string("** stop() Cg%d\r\n"), cog - 1)
         cog := 0                                                    '  mark stopped
 
-    pwmController.enableOutput(FALSE)
+    pca9685.enableOutput(FALSE)
 
 
 PUB homeArm()
     '' place the arm completely upright at start of run
     term.fstr0(string("** homeArm() ENTRY\r\n"))
-    servos[SERVO_BASE].slewToPostion(servos.M_ANGLE, HOME_SERVO_BASE)
-    servos[SERVO_SHOULDER].slewToPostion(servos.M_ANGLE, HOME_SERVO_SHOULDER)
-    servos[SERVO_ELBOW].slewToPostion(servos.M_ANGLE, HOME_SERVO_ELBOW)
-    servos[SERVO_WRIST_FLEX].slewToPostion(servos.M_ANGLE, HOME_SERVO_WRIST_FLEX)
-    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_ANGLE, HOME_SERVO_WRIST_ROTATE)
-    servos[SERVO_GRIP].slewToPostion(servos.M_USECS, DEFAULT_GRIP_SERVO_MAX)    ' closed
+    servos[SERVO_BASE].slewToPosition(servos.M_USECS, 1500)         '  90 degr
+    servos[SERVO_SHOULDER].slewToPosition(servos.M_USECS, 1647)     ' 109 degr
+    servos[SERVO_ELBOW].slewToPosition(servos.M_USECS, 1772)        ' 125 degr
+    servos[SERVO_WRIST_FLEX].slewToPosition(servos.M_USECS, 1538)   '  95 degr
+    servos[SERVO_WRIST_ROTATE].slewToPosition(servos.M_USECS, 1531) '  94 degr
+    servos[SERVO_GRIP].slewToPosition(servos.M_USECS, 1950)         ' 180 degr - closed
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
     term.fstr0(string("** homeArm() EXIT\r\n\r\n"))
@@ -133,16 +144,16 @@ PRI positionArm(eArmPosition) : bDidMove
     '#0, MO_NONE, MO_ELBO, MO_VERTICAL, MO_BOT_DOWN, MO_TOP_DOWN, MO_RT_DOWN, MO_FRONT_DOWN, MO_LT_DOWN, MO_BACK_DOWN, MO_ARM_CANTELEVER_F, MO_ARM_CANTELEVER_B
     case eArmPosition
         MO_ELBO:
-            'armFlatForwardYellowUp()
+            'armFlatBackYellowUp()
             'bDidMove := TRUE
         MO_VERTICAL:
             'homeArm()
             'bDidMove := TRUE
         MO_BOT_DOWN:                    '  YELLLOW UP / GREEN DOWN - OFF a bit
-            armFlatForwardYellowUp()
+            armFlatBackYellowUp()
             bDidMove := TRUE
         MO_TOP_DOWN:                    '  GREEN UP / YELLLOW DOWN
-            armFlatBackGreenUp()
+            armFlatForwardGreenUp()
             bDidMove := TRUE
         MO_RT_DOWN:                     '  ORANGE UP / RED DOWN  - tilted forward, tilted right
             armFlatForwardOrangeUp()
@@ -154,6 +165,8 @@ PRI positionArm(eArmPosition) : bDidMove
             armFlatBackRedUp()              ' GOOD
             bDidMove := TRUE
         MO_BACK_DOWN:                   '  PURPLE UP / CYAN DOWN
+            armFlatBackVioletUp()
+            bDidMove := TRUE
         MO_ARM_CANTELEVER_F:
             'armFlatForward()
             'bDidMove := TRUE
@@ -215,24 +228,24 @@ PUB showservoPositions() | servoIndex, posnUSec, posnDegr
 
 PUB gripClosed()
     '' Close the jaws
-    'term.fstr0(string("** gripClosed() SLEW\r\n"))
-    servos[SERVO_GRIP].slewToPostion(servos.M_USECS, DEFAULT_GRIP_SERVO_MAX)
+    'term.fstr0(string("** gripClosed()\r\n"))
+    servos[SERVO_GRIP].slewToPosition(servos.M_USECS, DEFAULT_GRIP_SERVO_MAX)
 
 PUB gripMidOpen()
     '' Open the jaws half-way
-    'term.fstr0(string("** gripOpen() SLEW\r\n"))
-    servos[SERVO_GRIP].slewToPostion(servos.M_USECS, servos[SERVO_GRIP].centerMicroSec())
+    'term.fstr0(string("** gripOpen()\r\n"))
+    servos[SERVO_GRIP].slewToPosition(servos.M_USECS, servos[SERVO_GRIP].centerMicroSec())
 
 PUB gripOpen()
     '' Open the jaws
-    'term.fstr0(string("** gripOpen() SLEW\r\n"))
-    servos[SERVO_GRIP].slewToPostion(servos.M_USECS, DEFAULT_GRIP_SERVO_MIN)
+    'term.fstr0(string("** gripOpen()\r\n"))
+    servos[SERVO_GRIP].slewToPosition(servos.M_USECS, DEFAULT_GRIP_SERVO_MIN)
 
 PUB positionServo(eServo, valueInUSec, minRange, maxRange) | servoIndex, newPosnUSec
     '' Move servo to specified position (limited by its own range)
     servoIndex := SERVO_BASE #> eServo <# SERVO_GRIP   ' must be one of our 6 servos
     newPosnUSec:= servos[servoIndex].mapValueToServoPosnInUSec(valueInUSec, minRange, maxRange)
-    servos[servoIndex].slewToPostion(servos.M_USECS, newPosnUSec)
+    servos[servoIndex].slewToPosition(servos.M_USECS, newPosnUSec)
 
 PUB doServoSteps() | angle
     '' TEST METHOD stepping a single servo
@@ -253,21 +266,22 @@ PUB quietController()
     '' Setup pins so signal is quiet so we can trigger our LA
     term.fstr0(string("** quietController()\r\n"))
 
-    pwmController.enableDebug(TRUE)
-    pwmController.init(pin_scl, pin_sda, pin_oe)  ' set pins to output low... so we can set LA trigger
+    pca9685.enableDebug(TRUE)
+    pca9685.init(pin_scl, pin_sda, pin_oe)  ' set pins to output low... so we can set LA trigger
 
 CON  { ---- PRIVATE Slew Control TASK ---- }
 
 
-PRI servoSlewTask() : ok | bDidMove, servoIndex
+PRI servoSlewTask() : ok | bDidMove, servoIndex, tmpID
     ' this is our servo slewing code...
     '  we are slewing to keep our arm momentum/inertia low
-    term.fstr1(string("** servoSlewTask() running in COG #%d **\r\n"), cogid())
+    tmpID := cogid()
+    term.fstr2(string("** servoSlewTask() running in Cg%d (0x%.4x) **\r\n"), tmpID, tmpID)
     taskInit()
     ok := taskInitController()
     if ok
         ' set pwm freq...
-        pwmController.configureController()
+        pca9685.configureController()
 
             ' define servo ranges and such
         taskInitArmServos()
@@ -285,35 +299,38 @@ PRI servoSlewTask() : ok | bDidMove, servoIndex
                 waitms(SLEW_WAIT_IN_MS)    ' 25 sorta ok, 10 bad, 20 sorta ok too (too much rocking)
     else
         term.fstr0(string("** servoSlewTask() startup failed (no pwm dvc)\r\n"))
+        abort -1
 
 PRI taskInit()
-    term.fstr0(string("** taskInit()\r\n"))
-    pwmController.enableDebug(TRUE)
-    pwmController.init(pin_scl, pin_sda, pin_oe)  ' set pins to output low... so we can set LA trigger
+    term.fstr1(string("** taskInit() Cg%d\r\n"), cogid())
+    pca9685.enableDebug(TRUE)
+    pca9685.init(pin_scl, pin_sda, pin_oe)  ' set pins to output low... so we can set LA trigger
 
 PRI taskInitController() : ok | deviceFound
     ' find and configure our mpu9dof device
 
     term.fstr0(string("** taskInitController() Setup...\r\n"))
-    pwmController.enableDebug(TRUE)
-    deviceFound := pwmController.start(pin_scl, pin_sda, pin_oe)                                           ' i2c @ 100kHz, no pull-ups
+    pca9685.enableDebug(TRUE)
+    deviceFound := pca9685.start(pin_scl, pin_sda, pin_oe)                                           ' i2c @ 100kHz, no pull-ups
+    term.fstr1(string("Start Found Addr:(%d)\r\n"), deviceFound - 1)
 
     term.fstr0(string("ID device address...\r\n"))
-    deviceFound := pwmController.deviceID()
-    ok := true
-    if(deviceFound <> pwmController.DVC_NOT_FOUND)
-        term.fstr1(string("Found Addr-%d\r\n"), deviceFound - 1)
+    deviceFound := pca9685.deviceID()
+    ok := TRUE
+    if(deviceFound <> pca9685.DVC_NOT_FOUND)
+        term.fstr1(string("dvcID Found Addr:(%d)\r\n"), deviceFound - 1)
     else
         term.fstr0(string("ERROR: Found no devices\r\n"))
-        ok := false
+        ok := FALSE
+        abort -1
 
-    pwmController.enableDebug(FALSE)
-    pwmController.enableOutput(TRUE)
+    pca9685.enableDebug(FALSE)
+    pca9685.enableOutput(TRUE)
     'term.fstr0(string("\r\nAccess PCA9685 16-chan PWM ...\r\n\r\n"))
 
 PRI taskInitArmServos()
     ' configure all the servo objects with channel and limits specific to each
-    pwmController.enableDebug(FALSE)
+    pca9685.enableDebug(FALSE)
     term.fstr0(string("\r\n** taskInitArmServos() ENTRY\r\n"))
     servos[SERVO_BASE].configureMinCtrMaxType(DEFAULT_SERVO_MIN, DEFAULT_SERVO_CENTER, DEFAULT_SERVO_MAX, servos.ST_360_DEGREE)
     servos[SERVO_BASE].init(CHAN_SERVO_BASE, servos[SERVO_BASE].M_NOT_SET, 0, string("Base"))
@@ -341,11 +358,11 @@ PRI taskInitArmServos()
     servos[SERVO_GRIP].enableDebug(TRUE)
     servos[SERVO_GRIP].setSlewSteps(25) ' 25 vs. default 75 (full range slew in 25 steps)
     term.fstr0(string("** taskInitArmServos() EXIT\r\n\r\n"))
-    pwmController.enableDebug(FALSE)
+    pca9685.enableDebug(FALSE)
 
 PRI taskForceArmHome()
     '' place the arm completely upright at start of run
-    pwmController.enableDebug(FALSE)
+    pca9685.enableDebug(FALSE)
     term.fstr0(string("\r\n** taskForceArmHome() ENTRY\r\n"))
     servos[SERVO_BASE].writePosition(servos.M_ANGLE, HOME_SERVO_BASE)
     servos[SERVO_SHOULDER].writePosition(servos.M_ANGLE, HOME_SERVO_SHOULDER)
@@ -360,108 +377,115 @@ PRI taskForceArmHome()
 
 CON  { ---- PRIVATE Utility Methods ---- }
 
-PRI armFlatForwardYellowUp()
+PRI armFlatBackYellowUp()
     ' place the arm bent at 90 degr overhanging base
     ' YELLOW UP
-    term.fstr0(string("** armFlatForwardYellowUp() SLEW\r\n"))
-    servos[SERVO_BASE].slewToPostion(servos.M_ANGLE, HOME_SERVO_BASE)
-    servos[SERVO_SHOULDER].slewToPostion(servos.M_ANGLE, 79)
-    servos[SERVO_ELBOW].slewToPostion(servos.M_ANGLE, 0)    ' was 8
-    servos[SERVO_WRIST_FLEX].slewToPostion(servos.M_ANGLE, HOME_SERVO_WRIST_FLEX)
-    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_ANGLE, HOME_SERVO_WRIST_ROTATE + 10)   ' 90 + 10 = 100
+    ' ** armFlatBackYellowUp() SLEW
+    ' + slewToPosition(1414 uSec (79 degr)) [1-Shldr] Cg0)
+    ' + slewToPosition(800 uSec (0 degr)) [2-Elbow] Cg0)
+    ' + slewToPosition(1570 uSec (99 degr)) [5-WrRota] Cg0)
+
+    term.fstr0(string("** armFlatBackYellowUp()\r\n"))
+    servos[SERVO_BASE].slewToPosition(servos.M_USECS, 1500)  ' 90 degr
+    servos[SERVO_SHOULDER].slewToPosition(servos.M_USECS, 1414)  ' 79 degr
+    servos[SERVO_ELBOW].slewToPosition(servos.M_USECS, 800)    ' 0 degr
+    servos[SERVO_WRIST_FLEX].slewToPosition(servos.M_USECS, 1538)    ' 95 degr
+    servos[SERVO_WRIST_ROTATE].slewToPosition(servos.M_USECS, 1560)   ' 99 degr
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
 
 PRI armFlatForwardOrangeUp()
     ' arm flat 2nd means
     ' ORANGE UP
-    term.fstr0(string("** armFlatForwardOrangeUp() SLEW\r\n"))
-    ' 1700 low
-    servos[SERVO_SHOULDER].slewToPostion(servos.M_ANGLE, 79)
-    servos[SERVO_ELBOW].slewToPostion(servos.M_ANGLE, 0)    ' was 8
-    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 850)   ' Orig 900
+    ' ** armFlatForwardOrangeUp() SLEW
+    ' + slewToPosition(1414 uSec (79 degr)) [1-Shldr] Cg0)
+    ' + slewToPosition(800 uSec (0 degr)) [2-Elbow] Cg0)
+    ' + slewToPosition(840 uSec (5 degr)) [5-WrRota] Cg0)
+
+    term.fstr0(string("** armFlatForwardOrangeUp()\r\n"))
+    servos[SERVO_SHOULDER].slewToPosition(servos.M_USECS, 1414)
+    servos[SERVO_ELBOW].slewToPosition(servos.M_USECS, 800)    ' was 8
+    servos[SERVO_WRIST_ROTATE].slewToPosition(servos.M_USECS, 840)   ' Orig 900, 850, 840
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
 
-PRI armFlatForwardRedUp()
-    ' arm flat 2nd means - grip inverted
-    ' RED UP
-    term.fstr0(string("** armFlatForwardRedUp() SLEW\r\n"))
-    ' 1700 low
-    servos[SERVO_SHOULDER].slewToPostion(servos.M_ANGLE, 79)
-    servos[SERVO_ELBOW].slewToPostion(servos.M_ANGLE, 0)    ' was 8
-    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 2300)
-    ' wait for servos to arrive at target positions
-    continueSlewingUntilDone()
+PRI armFlatBackVioletUp()
+    ' place the arm bent at 90 degr overhanging base
+    ' VIOLET UP
+    ' ** armFlatBackVioletUp() SLEW
+    ' + slewToPosn(1414 uSec (78 degr)) [1-Shldr] Cg0)
+    ' + slewToPosn(800 uSec (0 degr)) [2-Elbow] Cg0)
+    ' + slewToPosn(1620 uSec (105 degr)) [5-WrRota] Cg0)
 
-{
-PRI armFlatForwardPurpleUp()
-    ' arm flat 2nd means - grip ??
-    ' PURPLE UP
-    term.fstr0(string("** armFlatForwardPurpleUp() SLEW\r\n"))
-    ' 1700 low
-    servos[SERVO_SHOULDER].slewToPostion(servos.M_USECS, 1650)
-    servos[SERVO_ELBOW].slewToPostion(servos.M_USECS, 800)
-    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 1500)
+    term.fstr0(string("** armFlatBackVioletUp()\r\n"))
+    servos[SERVO_BASE].slewToPosition(servos.M_USECS, 1500)  ' 90 degr
+    servos[SERVO_SHOULDER].slewToPosition(servos.M_USECS, 1500) ' 90 degr
+    servos[SERVO_ELBOW].slewToPosition(servos.M_USECS, 900)    ' xx degr
+    servos[SERVO_WRIST_FLEX].slewToPosition(servos.M_USECS, 960)  ' 20 degr
+    servos[SERVO_WRIST_ROTATE].slewToPosition(servos.M_USECS, 1620)   ' 104 degr
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
-'}
 
 PRI armVertCyanUp()
     ' CYAN UP
-    term.fstr0(string("** armVertCyanUp() SLEW\r\n"))
-    servos[SERVO_SHOULDER].slewToPostion(servos.M_USECS, 1650)
-    servos[SERVO_ELBOW].slewToPostion(servos.M_USECS, 1800)
-    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 2200)
+    ' ** armVertCyanUp() SLEW
+    ' + slewToPosition(1650 uSec (109 degr)) [1-Shldr] Cg0)
+    ' + slewToPosition(1800 uSec (128 degr)) [2-Elbow] Cg0)
+    ' + slewToPosition(2200 uSec (180 degr)) [5-WrRota] Cg0)
+
+    term.fstr0(string("** armVertCyanUp()\r\n"))
+    servos[SERVO_BASE].slewToPosition(servos.M_USECS, 1500)  ' 90 degr
+    servos[SERVO_SHOULDER].slewToPosition(servos.M_USECS, 1650)
+    servos[SERVO_ELBOW].slewToPosition(servos.M_USECS, 1800)
+    servos[SERVO_WRIST_FLEX].slewToPosition(servos.M_USECS, 1538)
+    servos[SERVO_WRIST_ROTATE].slewToPosition(servos.M_USECS, 2200)
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
 
 PRI armFlatBack()
     ' arm flat 1st means
-    term.fstr0(string("** armFlatBack() SLEW\r\n"))
-    servos[SERVO_SHOULDER].slewToPostion(servos.M_ANGLE, 57)
-    servos[SERVO_ELBOW].slewToPostion(servos.M_ANGLE, 179)
+    term.fstr0(string("** armFlatBack()\r\n"))
+    servos[SERVO_SHOULDER].slewToPosition(servos.M_USECS, 1500) ' 90 degr
+    servos[SERVO_ELBOW].slewToPosition(servos.M_USECS, 886)    ' 12 degr
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
-
-{
-PRI armFlatBackOrangeUp()
-    ' arm flat 1st means
-    ' ORANGE UP
-    term.fstr0(string("** armFlatBackOrangeUp() SLEW\r\n"))
-    servos[SERVO_SHOULDER].slewToPostion(servos.M_USECS, 1420)
-    servos[SERVO_ELBOW].slewToPostion(servos.M_USECS, 2200)
-    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 900)
-    ' wait for servos to arrive at target positions
-    continueSlewingUntilDone()
-'}
 
 PRI armFlatBackRedUp()
     ' arm flat 1st means
     ' RED UP
-    term.fstr0(string("** armFlatBackRedUp() SLEW\r\n"))
-    servos[SERVO_SHOULDER].slewToPostion(servos.M_ANGLE, 57)
-    servos[SERVO_ELBOW].slewToPostion(servos.M_ANGLE, 179)
-    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 800)   ' 2300 -> 800 when back
+    ' ** armFlatBackRedUp()
+    ' + slewToPosn(1243 uSec (57 degr)) [1-Shldr] Cg0)
+    ' + slewToPosn(2192 uSec (179 degr)) [2-Elbow] Cg0)
+    ' + slewToPosn(800 uSec (0 degr)) [5-WrRota] Cg0)
+
+    term.fstr0(string("** armFlatBackRedUp()\r\n"))
+    servos[SERVO_SHOULDER].slewToPosition(servos.M_USECS, 1243)
+    servos[SERVO_ELBOW].slewToPosition(servos.M_USECS, 2192)
+    servos[SERVO_WRIST_ROTATE].slewToPosition(servos.M_USECS, 800)   ' 2300 -> 800 when back
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
 
-PRI armFlatBackGreenUp()
+PRI armFlatForwardGreenUp()
     ' arm flat 1st means
-    term.fstr0(string("** armFlatBackGreenUp() SLEW\r\n"))
-    servos[SERVO_SHOULDER].slewToPostion(servos.M_ANGLE, 57)
-    servos[SERVO_ELBOW].slewToPostion(servos.M_ANGLE, 179)
-    servos[SERVO_WRIST_ROTATE].slewToPostion(servos.M_USECS, 1550)  ' orig 1500
+    ' ** armFlatForwardGreenUp() SLEW
+    ' + slewToPosition(1243 uSec (57 degr)) [1-Shldr] Cg0)
+    ' + slewToPosition(2192 uSec (179 degr)) [2-Elbow] Cg0)
+    ' + slewToPosition(1550 uSec (96 degr)) [5-WrRota] Cg0)
+
+    term.fstr0(string("** armFlatForwardGreenUp()\r\n"))
+    servos[SERVO_SHOULDER].slewToPosition(servos.M_USECS, 1243)
+    servos[SERVO_ELBOW].slewToPosition(servos.M_USECS, 2192)
+    servos[SERVO_WRIST_ROTATE].slewToPosition(servos.M_USECS, 1550)  ' orig 1500
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
 
 
 PRI armFlatForward()
     ' arm flat 2nd means
-    term.fstr0(string("** armFlatForward() SLEW\r\n"))
+    term.fstr0(string("** armFlatForward()\r\n"))
     ' 1700 low
-    servos[SERVO_SHOULDER].slewToPostion(servos.M_ANGLE, 79)
-    servos[SERVO_ELBOW].slewToPostion(servos.M_ANGLE, 0)    ' was 8
+    servos[SERVO_SHOULDER].slewToPosition(servos.M_USECS, 1243)
+    servos[SERVO_ELBOW].slewToPosition(servos.M_USECS, 2192)
     ' wait for servos to arrive at target positions
     continueSlewingUntilDone()
 
