@@ -27,6 +27,13 @@ CON
     DEFAULT_SLEW_RATE_IN_USEC = (DEFAULT_LIMIT_USEC_MAX - DEFAULT_LIMIT_USEC_MIN) / DEFAULT_SLEW_STEPS
 
     MAX_SERVO_NAME_CHARS = 10
+    MAX_SLEW_TABLE_TABLE_ENTRIES = 5
+
+    ' Delays for MG996R at 5v
+    DELAY_USEC_HALF_RATE = 707
+    DELAY_USEC_QUARTER_RATE = 1414
+    DELAY_USEC_EIGHTH_RATE = 2829
+    DELAY_USEC_SIXTEENTH_RATE = 5657
 
 VAR
 
@@ -54,6 +61,20 @@ VAR
     BYTE    bPriorShowDebug
     BYTE    bHaveLimits                                         ' true when limits are specified
     BYTE    nameStr[MAX_SERVO_NAME_CHARS + 1]
+    ' slew table ea. entry:  rate, delay
+    '   rate: increment in uSec
+    '   delay: step expiration in tics
+    '
+    ' table calcs:
+    '   bell curve:
+    '     40-1400 % 6(1/8), 9(1/4), 70(1/2), 9(1/4), 6(1/8)   ct=5
+    '      1-39   %        10(1/8), 80(1/4), 10(1/8)          ct=3
+    BYTE    stRate[MAX_SLEW_TABLE_TABLE_ENTRIES]    ' travel rate in uSec for this entry
+    BYTE    stDelay[MAX_SLEW_TABLE_TABLE_ENTRIES]   ' delay value in tics for this entry
+    BYTE    stOffset[MAX_SLEW_TABLE_TABLE_ENTRIES]  ' when to switch to next entry
+    BYTE    stEntryCt       ' value of 3 or 5
+    BYTE    stCurrIdx       ' index of curr entry
+    BYTE    stNextExpire    ' when we need to send servo commands (tics since last + start of last)
 
 OBJ
 
@@ -173,10 +194,12 @@ PUB slewToPosition(mode, value) | bHaveHardware, bIsValidMode, tmpTargetUSec, tm
         tmpTargetUSec, tmpTargetDegr := positionInLimits(mode, value)
         bValueChanged := targetUSec <> tmpTargetUSec ? TRUE : FALSE
         if bValueChanged
-            if bShowDebug
-                term.fstr3(string("+ slewToPosn(%s) [%s] Cg%d)\r\n"), interpModeValue(mode, value), @nameStr, cogid())
             targetUSec := tmpTargetUSec
             targetDegr := tmpTargetDegr
+            ' XYZZY Recalculate ramps?!
+            reloadSlewRampTable(targetUSec - currPosnUSec)
+            if bShowDebug
+                term.fstr3(string("+ slewToPosn(%s) [%s] Cg%d)\r\n"), interpModeValue(mode, value), @nameStr, cogid())
         else
             if bShowDebug
                 term.fstr3(string("+   -at-Postion(%s) [%s] Cg%d)\r\n"), interpModeValue(mode, value), @nameStr, cogid())
@@ -184,6 +207,39 @@ PUB slewToPosition(mode, value) | bHaveHardware, bIsValidMode, tmpTargetUSec, tm
         if NOT bHaveSavedDebug
             saveDebug()
         bShowDebug := FALSE
+
+PRI reloadSlewRampTable(deltaUSec) | bIsIncreasing, absDeltaUSec, eighthUSec, qtrUSec, halfUSec
+    bIsIncreasing := deltaUSec >= 0 ? TRUE : FALSE
+    absDeltaUSec := abs deltaUSec
+    if absDeltaUSec > 40
+        ' populate 5 entry table
+        '     40-1400 % 6(1/8), 9(1/4), 70(1/2), 9(1/4), 6(1/8)   ct=5
+        eighthUSec := absDeltaUSec * 6 / 100
+        qtrUSec := absDeltaUSec * 9 / 100
+        halfUSec := absDeltaUSec - (eighthUSec * 2 + qtrUSec * 2)
+        stEntryCt := 5
+        ' load distance in USec
+        stRate[0] := stRate[4] := eighthUSec
+        stRate[1] := stRate[3] := qtrUSec
+        stRate[2] := halfUSec
+        ' load delay time in tics
+        stDelay[0] := stDelay[4] := DELAY_USEC_EIGHTH_RATE
+        stDelay[1] := stDelay[3] := DELAY_USEC_QUARTER_RATE
+        stDelay[2] := DELAY_USEC_HALF_RATE
+    else
+        ' populate 3 entry table
+        '      1-39   %        10(1/8), 80(1/4), 10(1/8)          ct=3
+        eighthUSec := absDeltaUSec * 10 / 100
+        qtrUSec := absDeltaUSec - (eighthUSec * 2)
+        stEntryCt := 3
+        ' load distance in USec
+        stRate[0] := stRate[2] := eighthUSec
+        stRate[1] := qtrUSec
+        ' load delay time in tics
+        stDelay[0] := stDelay[2] := DELAY_USEC_EIGHTH_RATE
+        stDelay[1] := DELAY_USEC_QUARTER_RATE
+
+    stCurrIdx := 0
 
 PUB continueSlew() : bAtTargetStatus | bHaveHardware, bIsValidTarget, deltaUSec, intermediateTargetUSec, bSlewComplete
     '' Continue slew to target position ... to final target or just next increment
@@ -229,9 +285,18 @@ PUB isAtPostion() : bAtTargetStatus | bHaveHardware, bIsActive, bValueChanged
         if bShowDebug && targetUSec <> SERVO_POSITION_NOT_SET && bValueChanged
             term.fstr4(string("+ isAtPostion() [%s] Cg%d, target %d == %d  --SLEW--\r\n"), @nameStr, cogid(), targetUSec, bAtTargetStatus)
 
+PUB delayExpired() : bDelayDidExpire
+    '' Return T/F where T means it's time for another command (delay has expired)
+    'bDelayDidExpire := getct() > stNextExpire ? TRUE : FALSE
+    bDelayDidExpire := TRUE ' fake this for now...
+
 PUB isActive() : bActiveStatus
     '' Return T/F where T means that servo is in USE (does know its last position)
     bActiveStatus := (currPosnUSec <> SERVO_POSITION_NOT_SET)
+
+PUB name() : pNameStr
+    '' return pointer to name of this servo
+    pNameStr := @nameStr
 
 PUB writePosition(mode, value) | bHaveHardware, bIsValidMode, currValue, bIsActive
     '' Update servo
@@ -357,11 +422,13 @@ PRI positionInLimits(mode, value) : retUSec, retDegr
     if (mode == M_ANGLE)
         retDegr := 0 #> value <# 180                                   ' legal degrees
         retUSec := angle2us(retDegr)                                  ' convert to uSecs
-        'term.fstr4(string("+ positionInLimits(ANGLE[%d], VAL %d) --> uSec %d, angle %d\r\n"), mode, value, retUSec, retDegr)
+        if retDegr <> value
+            term.fstr4(string("+ positionInLimits(ANGLE[%d], VAL %d) --> uSec %d, angle %d\r\n"), mode, value, retUSec, retDegr)
     elseif (mode == M_USECS)
         retUSec := uSecMinimum #> value <# uSecMaximum                 ' legal microseconds
         retDegr := us2Angle(retUSec)                                  ' convert to currPosnDegr
-        'term.fstr4(string("+ positionInLimits(uSec[%d], VAL %d) --> uSec %d, angle %d\r\n"), mode, value, retUSec, retDegr)
+        if retUSec <> value
+            term.fstr4(string("+ positionInLimits(uSec[%d], VAL %d) --> uSec %d, angle %d\r\n"), mode, value, retUSec, retDegr)
     else
         term.fstr2(string("+ positionInLimits(MODE %d, VAL %d) ERROR Bad MODE!\r\n"), mode, value)
 

@@ -89,12 +89,12 @@ PUB main() | statusOK, index
         ' ---- TEST TEST TEST ----
         {
         ' ----------- drive arm using controller - showing positions always
-        'if statusOK
-        term.fstr0(string("arm remote control\r\n"))
-        remoteCog := remoteCtl.setup()
-        statusOK := remoteCog <> 0 ? TRUE : FALSE
-        resetServoController(statusOK)
-        remoteControlArm()
+        if statusOK
+            term.fstr0(string("arm remote control\r\n"))
+            remoteCog := remoteCtl.setup()
+            statusOK := remoteCog <> 0 ? TRUE : FALSE
+            resetServoController(statusOK)
+            remoteControlArm()
         '}
         '{
         ' ----------- run arm thru positions and stop
@@ -104,6 +104,16 @@ PUB main() | statusOK, index
             demo()
             waitms(30000)
         '}
+
+        {
+        ' ----------- mass checks... move servo to get best speed without tipping
+        if statusOK
+            term.fstr0(string("waggle()\r\n"))
+            resetServoController(statusOK)
+            waggle()
+            waitms(30000)
+        '}
+
 
     tearDown()  ' stop any cogs, if needed
     term.fstr0(string("\r\nDone\r\n"))
@@ -246,6 +256,9 @@ PRI updPosnDAndRtJoy(nLoopCount) | bServoGroupUpper, posn, rngMin, rngMax
             rngMin, rngMax := remoteCtl.chanMinMax(remoteCtl.CTL_RT_JOY_HZ)
             arm.positionServo(arm.SERVO_SHOULDER, posn, rngMin, rngMax)
 
+PUB waggle()
+    '' step thru servos to determine best mopve rates without tipping
+    arm.waggle()
 
 PUB demo() | loopIndex
 

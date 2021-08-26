@@ -64,6 +64,8 @@ dat
 rxp  long  0
 txp  long  0
 
+lockID  long    -1
+
 pbuf  byte  0[80]                                                ' padded strings
 
 
@@ -292,12 +294,24 @@ pub fstr7(p_str, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
   format(p_str, @arg1)
 
 
-pub format(p_str, p_args) | idx, c, asc, field, digits
+pub format(p_str, p_args) | idx, c, asc, field, digits, lokRslt
 
 '' Emit formatted string with escape sequences and embedded values
 '' -- p_str is a pointer to the format control string
 '' -- p_args is pointer to array of longs that hold field values
 ''    * field values can be numbers, characters, or pointers to strings
+
+    if lockID < 0
+        lockID := LOCKNEW()
+        if lockID < 0
+            return
+
+    if lockID >= 0
+        repeat
+            lokRslt := locktry(lockID)
+            if lokRslt == 0
+                waitms(1)
+        while lokRslt == 0
 
   idx := 0                                                     ' value index
 
@@ -351,6 +365,8 @@ pub format(p_str, p_args) | idx, c, asc, field, digits
     else
       tx(c)
 
+    if lockID >= 0
+        lockrel(lockID)
 
 pri get_nargs(p_str) : p_str1, val1, val2 | c, sign
 

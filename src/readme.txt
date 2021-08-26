@@ -21,4 +21,4 @@ arm6axis_demo.spin2
 |-|-isp_serial_singleton.spin2
 arm6axis_demo.p2asm
 Done.
-Program size is 25068 bytes
+Program size is 26008 bytes
