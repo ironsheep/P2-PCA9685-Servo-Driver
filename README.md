@@ -18,6 +18,9 @@ And as I started in on this I also decided to use JonnyMac's FlySky SBUS support
 **Latest Repo Updates**:
 
 ```
+26 Aug 2021 17:56
+- Arm positions cleaned up, Movement cleaned up.
+- Prep'd for moving to better (servo specific) slewing - initial taper (bell curve)
 14 Aug 2021 16:36
 - Updated this readme with info about files in this repo
 20 Jul 2021 16:16
@@ -35,7 +38,42 @@ And as I started in on this I also decided to use JonnyMac's FlySky SBUS support
 
 ## Current status
 
-I'm working on position placement using FlySky then getting servo position readouts when I get to a desired ARM configuration.  Figuring out the puposes of the FlySky controls for this use case is proving to be quite interesting...
+I'm working on tapered slew ramps for the arm servo's so there is no inertial rocking when the arm starts/stops moving.  Then I'm adding the final roll/pitch/yaw movement routines for the arm.
+
+After these are completed this demo will take on the form of MPU 9DOF exercisor with the arm moving while I'm gathering 9DOF readings and tuning the algorithms.
+
+## Code Base items of Interest
+
+This section presents the controls and code structure of this project.
+
+### Current FlySky Controls
+
+Figuring out the puposes of the FlySky controls for this use case is proved to be quite interesting...  In the end, I mapped the following controls to functions within the demo program:
+
+Switch | Control Purpose |
+--- | ---- |
+swA DN | Enable joystick servo control|
+swB Toggle  | Display current servo positions
+swC UP | Close jaw
+swC MID | Partially open jaw
+swC DN | Open jaw
+swD DN | End control, shutdown program
+
+When SwB is toggled the folllowing output is generated (example):
+
+```bash
+--- SERVOS ---
+-->  [0-Base]  1500 uSec (90 degr)
+-->  [1-Shldr]  800 uSec (0 degr)
+-->  [2-Elbow]  1503 uSec (90 degr)
+-->  [4-WrFlex]  1497 uSec (89 degr)
+-->  [5-WrRota]  1497 uSec (89 degr)
+-->  [6-Grip]  1950 uSec (180 degr)
+--------------
+```
+
+This provides the name of each servo and the current postion (in both uSec and Degrees.)
+
 
 ### Current Compile Structure
 
@@ -75,10 +113,6 @@ isp\_serial_singleton.spin2 | singleton serial object | jm_serial object reshape
 jm_nstr.spin2 | JonnyMac's string formatter object | 
 jm\_sbus_rx.spin2 | JonnyMac's SBus object | Basic SBus access routines
 
-
-## Up Next
-
-- Work our way up from the hardware to the arm control to the scripting of the arm
 
 ## My Arm hardware
 
