@@ -18,6 +18,9 @@ And as I started in on this I also decided to use JonnyMac's FlySky SBUS support
 **Latest Repo Updates**:
 
 ```
+28 Aug 2021 14:55
+- Better servo ramps
+- BUG: arm can just stop <- FIND and FIX!!
 26 Aug 2021 17:56
 - Arm positions cleaned up, Movement cleaned up.
 - Prep'd for moving to better (servo specific) slewing - initial taper (bell curve)
