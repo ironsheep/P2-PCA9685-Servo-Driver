@@ -37,10 +37,14 @@ CON
     DELAY_USEC_EIGHTH_RATE = 2829
     DELAY_USEC_SIXTEENTH_RATE = 5657
 
-    STEP_INCRE_70PRCNT = 20
-    STEP_INCRE_9PRCNT = 12
-    STEP_INCRE_6PRCNT = 6
-    STEP_TABLE_LIMIT = (2 * STEP_INCRE_6PRCNT) + (2 * STEP_INCRE_9PRCNT) + STEP_INCRE_70PRCNT
+    TAIL_SML_PERCENT = 3    ' was 6
+    TAIL_LRG_PERCENT = 9    ' was 5
+
+
+    STEP_INCRE_MIDDLE = 18      ' was 20, 16
+    STEP_INCRE_LRG_TAIL = 10    ' was 12
+    STEP_INCRE_SML_TAIL = 6     ' same 6
+    STEP_TABLE_LIMIT = (2 * STEP_INCRE_SML_TAIL) + (2 * STEP_INCRE_LRG_TAIL) + STEP_INCRE_MIDDLE
 
 VAR
 
@@ -253,7 +257,8 @@ PUB continueSlew() : bAtTargetStatus | bHaveHardware, bIsValidTarget, deltaUSec,
             if stCurrCt == 0 && bDoneMsgShown == FALSE
                 bDoneMsgShown := TRUE
                 'term.fstr1(string("+ table chase [%s] done\r\n"), @nameStr)
-
+                if (targetUSec - currPosnUSec) <> 0
+                    term.fstr4(string("+ table chase [%s] done  desired:(%d), actual:(%d) DELTA=%d\r\n"), @nameStr, targetUSec, currPosnUSec, targetUSec - currPosnUSec)
 
 PUB continueSlewOld() : bAtTargetStatus | bHaveHardware, bIsValidTarget, deltaUSec, intermediateTargetUSec, bSlewComplete
     '' Continue slew to target position ... to final target or just next increment
@@ -411,28 +416,29 @@ PRI reloadSlewRampTable(targetUSec, currUSec) | deltaUSec, bIsIncreasing, absDel
     bDoneMsgShown := FALSE
     if absDeltaUSec > STEP_TABLE_LIMIT
         ' populate 5 entry table
-        '     40-1400 % 6(1/8), 9(1/4), 70(1/2), 9(1/4), 6(1/8)   ct=5
-        eighthUSec := absDeltaUSec * 6 / 100                        ' 6 %
-        qtrUSec := absDeltaUSec * 9 / 100                           ' 9 %
+        '     50-1400 % 6(1/8), 9(1/4), 70(1/2), 9(1/4), 6(1/8)   ct=5  <OLD>
+        '     46-1400 % 3(1/8), 5(1/4), 84(1/2), 5(1/4), 3(1/8)   ct=5
+        eighthUSec := absDeltaUSec * TAIL_SML_PERCENT / 100                        ' 6 %
+        qtrUSec := absDeltaUSec * TAIL_LRG_PERCENT / 100                           ' 9 %
         halfUSec := absDeltaUSec - (eighthUSec * 2 + qtrUSec * 2)   ' remainder after - 30% (2 x 15%)
         stEntryCt := 5
         ' load distance in USec
-        BYTE [@stUSec][0] := BYTE [@stUSec][4] := bIsIncreasing ? STEP_INCRE_6PRCNT : 0 - STEP_INCRE_6PRCNT
-        BYTE [@stUSec][1] := BYTE [@stUSec][3] := bIsIncreasing ? STEP_INCRE_9PRCNT : 0 - STEP_INCRE_9PRCNT
-        BYTE [@stUSec][2] := bIsIncreasing ? STEP_INCRE_70PRCNT : 0 - STEP_INCRE_70PRCNT
+        BYTE [@stUSec][0] := BYTE [@stUSec][4] := bIsIncreasing ? STEP_INCRE_SML_TAIL : 0 - STEP_INCRE_SML_TAIL
+        BYTE [@stUSec][1] := BYTE [@stUSec][3] := bIsIncreasing ? STEP_INCRE_LRG_TAIL : 0 - STEP_INCRE_LRG_TAIL
+        BYTE [@stUSec][2] := bIsIncreasing ? STEP_INCRE_MIDDLE : 0 - STEP_INCRE_MIDDLE
         ' load our step count
-        BYTE [@stCount][0] := BYTE [@stCount][4] := eighthUSec / STEP_INCRE_6PRCNT
-        BYTE [@stCount][1] := BYTE [@stCount][3] := qtrUSec / STEP_INCRE_9PRCNT
-        BYTE [@stCount][2] := halfUSec / STEP_INCRE_70PRCNT
+        BYTE [@stCount][0] := BYTE [@stCount][4] := eighthUSec / STEP_INCRE_SML_TAIL
+        BYTE [@stCount][1] := BYTE [@stCount][3] := qtrUSec / STEP_INCRE_LRG_TAIL
+        BYTE [@stCount][2] := halfUSec / STEP_INCRE_MIDDLE
         ' load delay time in tics
         WORD [@stDelay][0] := WORD [@stDelay][4] := DELAY_USEC_EIGHTH_RATE
         WORD [@stDelay][1] := WORD [@stDelay][3] := DELAY_USEC_QUARTER_RATE
         WORD [@stDelay][2] := DELAY_USEC_HALF_RATE
 
         finalStepSize := absDeltaUSec
-        finalStepSize -= ((eighthUSec / STEP_INCRE_6PRCNT) * STEP_INCRE_6PRCNT) * 2
-        finalStepSize -= ((qtrUSec / STEP_INCRE_9PRCNT ) * STEP_INCRE_9PRCNT) * 2
-        finalStepSize -= (halfUSec / STEP_INCRE_70PRCNT) * STEP_INCRE_70PRCNT
+        finalStepSize -= ((eighthUSec / STEP_INCRE_SML_TAIL) * STEP_INCRE_SML_TAIL) * 2
+        finalStepSize -= ((qtrUSec / STEP_INCRE_LRG_TAIL ) * STEP_INCRE_LRG_TAIL) * 2
+        finalStepSize -= (halfUSec / STEP_INCRE_MIDDLE) * STEP_INCRE_MIDDLE
 
         if finalStepSize > 0
             stEntryCt++
@@ -443,24 +449,24 @@ PRI reloadSlewRampTable(targetUSec, currUSec) | deltaUSec, bIsIncreasing, absDel
             ' load delay time in tics
             WORD [@stDelay][5] := DELAY_USEC_EIGHTH_RATE
 
-    elseif absDeltaUSec > STEP_INCRE_6PRCNT
+    elseif absDeltaUSec > STEP_INCRE_SML_TAIL
         ' populate double/single entry table - slow move w/tail (or just tail)
         qtrUSec := absDeltaUSec * 10 / 100  ' tail minimum (10%)
-        halfUSec := (absDeltaUSec - qtrUSec) / STEP_INCRE_6PRCNT
+        halfUSec := (absDeltaUSec - qtrUSec) / STEP_INCRE_SML_TAIL
         ' add rest of remainder to tail
-        qtrUSec := absDeltaUSec - (halfUSec * STEP_INCRE_6PRCNT)
+        qtrUSec := absDeltaUSec - (halfUSec * STEP_INCRE_SML_TAIL)
         ' cal step counts to know how populate table
-        bigStepCt := halfUSec / STEP_INCRE_9PRCNT
-        smallStepCt := qtrUSec / STEP_INCRE_6PRCNT
-        finalStepSize := absDeltaUSec - ((bigStepCt * STEP_INCRE_9PRCNT) + (smallStepCt * STEP_INCRE_6PRCNT))
+        bigStepCt := halfUSec / STEP_INCRE_LRG_TAIL
+        smallStepCt := qtrUSec / STEP_INCRE_SML_TAIL
+        finalStepSize := absDeltaUSec - ((bigStepCt * STEP_INCRE_LRG_TAIL) + (smallStepCt * STEP_INCRE_SML_TAIL))
         'if small step size is 1 add it into the final step size
         if smallStepCt == 1
-            finalStepSize := finalStepSize + STEP_INCRE_6PRCNT
+            finalStepSize := finalStepSize + STEP_INCRE_SML_TAIL
         tableIdx := 0
         if bigStepCt > 0
             ' have 2 or 3 entry table
             ' load distance in USec
-            BYTE [@stUSec][tableIdx] := bIsIncreasing ? STEP_INCRE_9PRCNT : 0 - STEP_INCRE_9PRCNT
+            BYTE [@stUSec][tableIdx] := bIsIncreasing ? STEP_INCRE_LRG_TAIL : 0 - STEP_INCRE_LRG_TAIL
             ' load our step count
             BYTE [@stCount][tableIdx]  := bigStepCt
             ' load delay time in tics
@@ -469,7 +475,7 @@ PRI reloadSlewRampTable(targetUSec, currUSec) | deltaUSec, bIsIncreasing, absDel
             if smallStepCt > 1
             ' have 3 entry table
                 ' load distance in USec
-                BYTE [@stUSec][tableIdx] := bIsIncreasing ? STEP_INCRE_6PRCNT : 0 - STEP_INCRE_6PRCNT
+                BYTE [@stUSec][tableIdx] := bIsIncreasing ? STEP_INCRE_SML_TAIL : 0 - STEP_INCRE_SML_TAIL
                 ' load our step count
                 BYTE [@stCount][tableIdx]  := smallStepCt
                 ' load delay time in tics
@@ -487,7 +493,7 @@ PRI reloadSlewRampTable(targetUSec, currUSec) | deltaUSec, bIsIncreasing, absDel
             ' have 1 or 2 entry table
             if smallStepCt > 1
             ' have 2 entry table
-                BYTE [@stUSec][tableIdx] := bIsIncreasing ? STEP_INCRE_6PRCNT : 0 - STEP_INCRE_6PRCNT
+                BYTE [@stUSec][tableIdx] := bIsIncreasing ? STEP_INCRE_SML_TAIL : 0 - STEP_INCRE_SML_TAIL
                 ' load our step count
                 BYTE [@stCount][tableIdx]  := smallStepCt
                 ' load delay time in tics

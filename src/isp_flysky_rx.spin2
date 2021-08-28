@@ -68,6 +68,7 @@ PUB null()
 
 pub setup() : cog
     '' Configure IO and objects for application
+    bShowDebug := FALSE ' default
     cog := sbus.start(SBUS_RX, @Defaults)                                ' start s.bus rx
     waitms(250)
     show_sbus()
