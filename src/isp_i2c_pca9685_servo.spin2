@@ -13,6 +13,8 @@
 
 CON
 
+    CLK_FREQ = 200_000_000                                        ' system freq as a constant (MAKE SURE THIS IS SAME AS IN TOP FILE!!!)
+
     #0, M_NOT_SET, M_ANGLE, M_USECS                                 ' write/read modes
     #0, ST_NOT_SET, ST_STANDARD, ST_360_DEGREE                      ' Servo Types (limit behaviors)
 
@@ -27,13 +29,18 @@ CON
     DEFAULT_SLEW_RATE_IN_USEC = (DEFAULT_LIMIT_USEC_MAX - DEFAULT_LIMIT_USEC_MIN) / DEFAULT_SLEW_STEPS
 
     MAX_SERVO_NAME_CHARS = 10
-    MAX_SLEW_TABLE_TABLE_ENTRIES = 5
+    MAX_SLEW_TABLE_TABLE_ENTRIES = 8    ' was 5 now 8 for easy debug
 
     ' Delays for MG996R at 5v
     DELAY_USEC_HALF_RATE = 707
     DELAY_USEC_QUARTER_RATE = 1414
     DELAY_USEC_EIGHTH_RATE = 2829
     DELAY_USEC_SIXTEENTH_RATE = 5657
+
+    STEP_INCRE_70PRCNT = 20
+    STEP_INCRE_9PRCNT = 12
+    STEP_INCRE_6PRCNT = 6
+    STEP_TABLE_LIMIT = (2 * STEP_INCRE_6PRCNT) + (2 * STEP_INCRE_9PRCNT) + STEP_INCRE_70PRCNT
 
 VAR
 
@@ -57,6 +64,7 @@ VAR
     BYTE    bChannelSpecified                                   ' true when servo-channel is set up
     BYTE    bStopped
     BYTE    bShowDebug
+    BYTE    bDoneMsgShown
     BYTE    bHaveSavedDebug
     BYTE    bPriorShowDebug
     BYTE    bHaveLimits                                         ' true when limits are specified
@@ -69,12 +77,16 @@ VAR
     '   bell curve:
     '     40-1400 % 6(1/8), 9(1/4), 70(1/2), 9(1/4), 6(1/8)   ct=5
     '      1-39   %        10(1/8), 80(1/4), 10(1/8)          ct=3
-    BYTE    stRate[MAX_SLEW_TABLE_TABLE_ENTRIES]    ' travel rate in uSec for this entry
-    BYTE    stDelay[MAX_SLEW_TABLE_TABLE_ENTRIES]   ' delay value in tics for this entry
-    BYTE    stOffset[MAX_SLEW_TABLE_TABLE_ENTRIES]  ' when to switch to next entry
+    LONG    ms001           ' mSec tics at curr clock freq
+    LONG    us001           ' uSec tics at curr clock freq
+    LONG    stNextExpire    ' when we need to send servo commands (tics since last + start of last)
+    LONG    stDummy         ' fill
+    WORD    stDelay[MAX_SLEW_TABLE_TABLE_ENTRIES]   ' delay value in tics for this entry
+    BYTE    stUSec[MAX_SLEW_TABLE_TABLE_ENTRIES]    ' travel rate in uSec for this entry
+    BYTE    stCount[MAX_SLEW_TABLE_TABLE_ENTRIES]   ' number of times to step at this rate
     BYTE    stEntryCt       ' value of 3 or 5
     BYTE    stCurrIdx       ' index of curr entry
-    BYTE    stNextExpire    ' when we need to send servo commands (tics since last + start of last)
+    BYTE    stCurrCt        ' number of steps to switch
 
 OBJ
 
@@ -100,11 +112,15 @@ PUB init(chan, mode, value, pNameStr) | bValidMode, nameLen
     bHaveSavedDebug := FALSE
     targetUSec := SERVO_POSITION_NOT_SET
     targetDegr := SERVO_POSITION_NOT_SET
-    bLastAtTargetStatus := -2   ' value can't happen
+    bLastAtTargetStatus := -2           ' value can't happen
+
+    ms001 := CLK_FREQ / 1_000           ' ticks in 1ms
+    us001 := CLK_FREQ / 1_000_000       ' ticks in 1us
+    stDummy := -1                       ' dump marker
 
     bytefill(@nameStr, 0, MAX_SERVO_NAME_CHARS + 1)
     byte [@nameStr][0] := chan + $30    ' add ASCII bias
-    byte [@nameStr][1] := $2D    ' hyphen
+    byte [@nameStr][1] := $2D           ' hyphen
 
     nameLen := strsize(pNameStr)
     if(nameLen > MAX_SERVO_NAME_CHARS - 2)
@@ -197,54 +213,52 @@ PUB slewToPosition(mode, value) | bHaveHardware, bIsValidMode, tmpTargetUSec, tm
             targetUSec := tmpTargetUSec
             targetDegr := tmpTargetDegr
             ' XYZZY Recalculate ramps?!
-            reloadSlewRampTable(targetUSec - currPosnUSec)
             if bShowDebug
                 term.fstr3(string("+ slewToPosn(%s) [%s] Cg%d)\r\n"), interpModeValue(mode, value), @nameStr, cogid())
-        else
-            if bShowDebug
-                term.fstr3(string("+   -at-Postion(%s) [%s] Cg%d)\r\n"), interpModeValue(mode, value), @nameStr, cogid())
+            reloadSlewRampTable(targetUSec, currPosnUSec)
+        'else
+        '    if bShowDebug
+        '        term.fstr3(string("+   -at-Postion(%s) [%s] Cg%d)\r\n"), interpModeValue(mode, value), @nameStr, cogid())
 
         if NOT bHaveSavedDebug
             saveDebug()
         bShowDebug := FALSE
 
-PRI reloadSlewRampTable(deltaUSec) | bIsIncreasing, absDeltaUSec, eighthUSec, qtrUSec, halfUSec
-    bIsIncreasing := deltaUSec >= 0 ? TRUE : FALSE
-    absDeltaUSec := abs deltaUSec
-    if absDeltaUSec > 40
-        ' populate 5 entry table
-        '     40-1400 % 6(1/8), 9(1/4), 70(1/2), 9(1/4), 6(1/8)   ct=5
-        eighthUSec := absDeltaUSec * 6 / 100
-        qtrUSec := absDeltaUSec * 9 / 100
-        halfUSec := absDeltaUSec - (eighthUSec * 2 + qtrUSec * 2)
-        stEntryCt := 5
-        ' load distance in USec
-        stRate[0] := stRate[4] := eighthUSec
-        stRate[1] := stRate[3] := qtrUSec
-        stRate[2] := halfUSec
-        ' load delay time in tics
-        stDelay[0] := stDelay[4] := DELAY_USEC_EIGHTH_RATE
-        stDelay[1] := stDelay[3] := DELAY_USEC_QUARTER_RATE
-        stDelay[2] := DELAY_USEC_HALF_RATE
-    else
-        ' populate 3 entry table
-        '      1-39   %        10(1/8), 80(1/4), 10(1/8)          ct=3
-        eighthUSec := absDeltaUSec * 10 / 100
-        qtrUSec := absDeltaUSec - (eighthUSec * 2)
-        stEntryCt := 3
-        ' load distance in USec
-        stRate[0] := stRate[2] := eighthUSec
-        stRate[1] := qtrUSec
-        ' load delay time in tics
-        stDelay[0] := stDelay[2] := DELAY_USEC_EIGHTH_RATE
-        stDelay[1] := DELAY_USEC_QUARTER_RATE
 
-    stCurrIdx := 0
+PUB continueSlew() : bAtTargetStatus | bHaveHardware, bIsValidTarget, deltaUSec, intermediateTargetUSec, bSlewComplete, currTicks
+    '' Continue slew to target position ... to final target or just next increment (table chase version)
+    bHaveHardware := hardwareConfigured(string("continueSlew"))
+    if bHaveHardware
+        currTicks := getct()
+        if stCurrCt > 0 && currTicks >= stNextExpire       ' if exired, move
+            ' curr table index points to our values
+            ' calc our next intermediate target
+            intermediateTargetUSec := currPosnUSec + (BYTE [@stUSec][stCurrIdx] signx 7)
+            ' calc and set our next expiration time in Ticks
+            stNextExpire := currTicks + (WORD [@stDelay][stCurrIdx] * us001)
+            stCurrCt--
+            if stCurrCt == 0
+              if stCurrIdx < stEntryCt - 1
+                stCurrIdx++
+                stCurrCt := BYTE [@stCount][stCurrIdx]
+            {
+            term.fstr2(string("+ -CS- intermediateTargetUSec[%s]: %d\r\n"), @nameStr, intermediateTargetUSec)
+            term.fstr1(string("+    - currTicks: %d\r\n"), currTicks)
+            term.fstr1(string("+    - stCurrCt: %d\r\n"), stCurrCt)
+            term.fstr1(string("+    - stCurrIdx: %d\r\n"), stCurrIdx)
+            term.fstr1(string("+    - stNextExpire: %d\r\n\r\n"), stNextExpire)
+            '}
+            writePosition(M_USECS, intermediateTargetUSec)
+        else
+            if stCurrCt == 0 && bDoneMsgShown == FALSE
+                bDoneMsgShown := TRUE
+                'term.fstr1(string("+ table chase [%s] done\r\n"), @nameStr)
 
-PUB continueSlew() : bAtTargetStatus | bHaveHardware, bIsValidTarget, deltaUSec, intermediateTargetUSec, bSlewComplete
+
+PUB continueSlewOld() : bAtTargetStatus | bHaveHardware, bIsValidTarget, deltaUSec, intermediateTargetUSec, bSlewComplete
     '' Continue slew to target position ... to final target or just next increment
     bHaveHardware := hardwareConfigured(string("continueSlew"))
-    if (bHaveHardware)
+    if bHaveHardware
         deltaUSec := targetUSec - currPosnUSec
         'if bShowDebug
         '    term.fstr3(string("+ continueSlew() [%s], target %d, delta %d)\r\n"), @nameStr, targetUSec, deltaUSec)
@@ -282,13 +296,13 @@ PUB isAtPostion() : bAtTargetStatus | bHaveHardware, bIsActive, bValueChanged
         if bValueChanged
             bLastAtTargetStatus := bAtTargetStatus
         'if bShowDebug && bAtTargetStatus == FALSE && targetUSec <> SERVO_POSITION_NOT_SET
-        if bShowDebug && targetUSec <> SERVO_POSITION_NOT_SET && bValueChanged
-            term.fstr4(string("+ isAtPostion() [%s] Cg%d, target %d == %d  --SLEW--\r\n"), @nameStr, cogid(), targetUSec, bAtTargetStatus)
+        'if bShowDebug && targetUSec <> SERVO_POSITION_NOT_SET && bValueChanged
+        '    term.fstr4(string("+ isAtPostion() [%s] Cg%d, target %d == %d  --SLEW--\r\n"), @nameStr, cogid(), targetUSec, bAtTargetStatus)
 
 PUB delayExpired() : bDelayDidExpire
     '' Return T/F where T means it's time for another command (delay has expired)
-    'bDelayDidExpire := getct() > stNextExpire ? TRUE : FALSE
-    bDelayDidExpire := TRUE ' fake this for now...
+    bDelayDidExpire := getct() > stNextExpire ? TRUE : FALSE
+    'bDelayDidExpire := TRUE ' fake this for now...
 
 PUB isActive() : bActiveStatus
     '' Return T/F where T means that servo is in USE (does know its last position)
@@ -389,6 +403,129 @@ PRI interpModeValue(mode, value) : pInterpStr | bValidMode, byteIndex, pDigitStr
 PRI strcpy(pDest, pSrc) : lenCopied
     lenCopied := strsize(pSrc)
     bytemove(pDest, pSrc, lenCopied)
+
+PRI reloadSlewRampTable(targetUSec, currUSec) | deltaUSec, bIsIncreasing, absDeltaUSec, eighthUSec, qtrUSec, halfUSec, bigStepCt, smallStepCt, finalStepSize, tableIdx, pTable, tableLen
+    deltaUSec := targetUSec - currUSec
+    bIsIncreasing := deltaUSec >= 0 ? TRUE : FALSE
+    absDeltaUSec := abs deltaUSec
+    bDoneMsgShown := FALSE
+    if absDeltaUSec > STEP_TABLE_LIMIT
+        ' populate 5 entry table
+        '     40-1400 % 6(1/8), 9(1/4), 70(1/2), 9(1/4), 6(1/8)   ct=5
+        eighthUSec := absDeltaUSec * 6 / 100                        ' 6 %
+        qtrUSec := absDeltaUSec * 9 / 100                           ' 9 %
+        halfUSec := absDeltaUSec - (eighthUSec * 2 + qtrUSec * 2)   ' remainder after - 30% (2 x 15%)
+        stEntryCt := 5
+        ' load distance in USec
+        BYTE [@stUSec][0] := BYTE [@stUSec][4] := bIsIncreasing ? STEP_INCRE_6PRCNT : 0 - STEP_INCRE_6PRCNT
+        BYTE [@stUSec][1] := BYTE [@stUSec][3] := bIsIncreasing ? STEP_INCRE_9PRCNT : 0 - STEP_INCRE_9PRCNT
+        BYTE [@stUSec][2] := bIsIncreasing ? STEP_INCRE_70PRCNT : 0 - STEP_INCRE_70PRCNT
+        ' load our step count
+        BYTE [@stCount][0] := BYTE [@stCount][4] := eighthUSec / STEP_INCRE_6PRCNT
+        BYTE [@stCount][1] := BYTE [@stCount][3] := qtrUSec / STEP_INCRE_9PRCNT
+        BYTE [@stCount][2] := halfUSec / STEP_INCRE_70PRCNT
+        ' load delay time in tics
+        WORD [@stDelay][0] := WORD [@stDelay][4] := DELAY_USEC_EIGHTH_RATE
+        WORD [@stDelay][1] := WORD [@stDelay][3] := DELAY_USEC_QUARTER_RATE
+        WORD [@stDelay][2] := DELAY_USEC_HALF_RATE
+
+        finalStepSize := absDeltaUSec
+        finalStepSize -= ((eighthUSec / STEP_INCRE_6PRCNT) * STEP_INCRE_6PRCNT) * 2
+        finalStepSize -= ((qtrUSec / STEP_INCRE_9PRCNT ) * STEP_INCRE_9PRCNT) * 2
+        finalStepSize -= (halfUSec / STEP_INCRE_70PRCNT) * STEP_INCRE_70PRCNT
+
+        if finalStepSize > 0
+            stEntryCt++
+            ' load distance in USec
+            BYTE [@stUSec][5] := bIsIncreasing ? finalStepSize : 0 - finalStepSize
+            ' load our step count
+            BYTE [@stCount][5] := 1
+            ' load delay time in tics
+            WORD [@stDelay][5] := DELAY_USEC_EIGHTH_RATE
+
+    elseif absDeltaUSec > STEP_INCRE_6PRCNT
+        ' populate double/single entry table - slow move w/tail (or just tail)
+        qtrUSec := absDeltaUSec * 10 / 100  ' tail minimum (10%)
+        halfUSec := (absDeltaUSec - qtrUSec) / STEP_INCRE_6PRCNT
+        ' add rest of remainder to tail
+        qtrUSec := absDeltaUSec - (halfUSec * STEP_INCRE_6PRCNT)
+        ' cal step counts to know how populate table
+        bigStepCt := halfUSec / STEP_INCRE_9PRCNT
+        smallStepCt := qtrUSec / STEP_INCRE_6PRCNT
+        finalStepSize := absDeltaUSec - ((bigStepCt * STEP_INCRE_9PRCNT) + (smallStepCt * STEP_INCRE_6PRCNT))
+        'if small step size is 1 add it into the final step size
+        if smallStepCt == 1
+            finalStepSize := finalStepSize + STEP_INCRE_6PRCNT
+        tableIdx := 0
+        if bigStepCt > 0
+            ' have 2 or 3 entry table
+            ' load distance in USec
+            BYTE [@stUSec][tableIdx] := bIsIncreasing ? STEP_INCRE_9PRCNT : 0 - STEP_INCRE_9PRCNT
+            ' load our step count
+            BYTE [@stCount][tableIdx]  := bigStepCt
+            ' load delay time in tics
+            WORD [@stDelay][tableIdx] :=  DELAY_USEC_QUARTER_RATE
+            tableIdx++
+            if smallStepCt > 1
+            ' have 3 entry table
+                ' load distance in USec
+                BYTE [@stUSec][tableIdx] := bIsIncreasing ? STEP_INCRE_6PRCNT : 0 - STEP_INCRE_6PRCNT
+                ' load our step count
+                BYTE [@stCount][tableIdx]  := smallStepCt
+                ' load delay time in tics
+                WORD [@stDelay][tableIdx] :=  DELAY_USEC_EIGHTH_RATE
+                tableIdx++
+            ' place final entry of 2 or 3 entry table
+            ' load distance in USec
+            BYTE [@stUSec][tableIdx] := bIsIncreasing ? finalStepSize : 0 - finalStepSize
+            ' load our step count
+            BYTE [@stCount][tableIdx]  := 1
+            ' load delay time in tics
+            WORD [@stDelay][tableIdx] :=  DELAY_USEC_EIGHTH_RATE
+            tableIdx++
+        else
+            ' have 1 or 2 entry table
+            if smallStepCt > 1
+            ' have 2 entry table
+                BYTE [@stUSec][tableIdx] := bIsIncreasing ? STEP_INCRE_6PRCNT : 0 - STEP_INCRE_6PRCNT
+                ' load our step count
+                BYTE [@stCount][tableIdx]  := smallStepCt
+                ' load delay time in tics
+                WORD [@stDelay][tableIdx] :=  DELAY_USEC_EIGHTH_RATE
+                tableIdx++
+            ' place final entry of 1 or 2 entry table
+            ' load distance in USec
+            BYTE [@stUSec][tableIdx] := bIsIncreasing ? finalStepSize : 0 - finalStepSize
+            ' load our step count
+            BYTE [@stCount][tableIdx]  := 1
+            ' load delay time in tics
+            WORD [@stDelay][tableIdx] :=  DELAY_USEC_EIGHTH_RATE
+            tableIdx++
+        stEntryCt := tableIdx
+    else
+        ' single entry table
+        ' -- travel remainder of distance in 1 go at half/speed
+        stEntryCt := 1
+        ' load distance in USec
+        BYTE [@stUSec][0] := bIsIncreasing ? absDeltaUSec : 0 - absDeltaUSec
+        ' load our step count
+        BYTE [@stCount][0]  := 1
+        ' load delay time in tics
+        WORD [@stDelay][0] :=  DELAY_USEC_HALF_RATE
+
+    stCurrIdx := 0
+    stCurrCt := BYTE [@stCount][stCurrIdx]  ' set initial number of steps (must be > 0)
+    stNextExpire := getct()                 ' set already expired
+
+    'term.memDump(@ms001, @stCurrCt - @ms001 + 1, string("ServoSlewTable"))
+    dumpTable(targetUSec, currUSec, deltaUSec)
+    term.fstr0(string("\r\n"))
+
+PRI dumpTable(targetUSec, currUSec, deltaUSec) | tableIndex
+    ' dump our table formatted
+    term.fstr5(string("- TABLE [%s] %d entry/ies, from(%d) to(%d) delta(%d)\r\n"), @nameStr, stEntryCt, currUSec, targetUSec, deltaUSec)
+    repeat tableIndex from 0 to stEntryCt - 1
+        term.fstr4(string("- E%d: uS(%d), ct(%d), delay(%d)\r\n"), tableIndex+1, BYTE [@stUSec][tableIndex] signx 7, BYTE [@stCount][tableIndex], WORD [@stDelay][tableIndex])
 
 PRI isValidMode(mode) : bValidStatus
     ' Return T/F where T means {mode} is valid

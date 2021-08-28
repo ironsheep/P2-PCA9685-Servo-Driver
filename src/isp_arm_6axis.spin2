@@ -361,24 +361,27 @@ PRI taskInitArmServos()
     servos[SERVO_SHOULDER].configureMinCtrMaxType(DEFAULT_SERVO_MIN, 1640, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
     servos[SERVO_SHOULDER].init(CHAN_SERVO_SHOULDER, servos[SERVO_SHOULDER].M_NOT_SET, 0, string("Shldr"))
     servos[SERVO_SHOULDER].enableDebug(TRUE)
+    servos[SERVO_GRIP].setSlewSteps(70)
 
     servos[SERVO_ELBOW].configureMinCtrMaxType(DEFAULT_SERVO_MIN, 1800, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
     servos[SERVO_ELBOW].init(CHAN_SERVO_ELBOW, servos[SERVO_ELBOW].M_NOT_SET, 0, string("Elbow"))
     servos[SERVO_ELBOW].enableDebug(TRUE)
+    servos[SERVO_GRIP].setSlewSteps(70)
 
     servos[SERVO_WRIST_FLEX].configureMinCtrMaxType(DEFAULT_SERVO_MIN, 1547, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
     servos[SERVO_WRIST_FLEX].init(CHAN_SERVO_WRIST_FLEX, servos.M_NOT_SET, 0, string("WrFlex"))
     servos[SERVO_WRIST_FLEX].enableDebug(TRUE)
+    servos[SERVO_GRIP].setSlewSteps(50)
 
     servos[SERVO_WRIST_ROTATE].configureMinCtrMaxType(DEFAULT_SERVO_MIN, 1540, DEFAULT_SERVO_MAX, servos.ST_STANDARD)
     servos[SERVO_WRIST_ROTATE].init(CHAN_SERVO_WRIST_ROTATE, servos.M_NOT_SET, 0, string("WrRota"))
     servos[SERVO_WRIST_ROTATE].enableDebug(TRUE)
-    servos[SERVO_WRIST_ROTATE].setSlewSteps(25) ' 25 vs. default 75 (full range slew in 25 steps)
+    servos[SERVO_WRIST_ROTATE].setSlewSteps(25)
 
     servos[SERVO_GRIP].configureMinCtrMaxType(DEFAULT_GRIP_SERVO_MIN, servos.CALCULATE_CENTER, DEFAULT_GRIP_SERVO_MAX, servos.ST_STANDARD)
     servos[SERVO_GRIP].init(CHAN_SERVO_GRIP, servos.M_NOT_SET, 0, string("Grip"))
     servos[SERVO_GRIP].enableDebug(TRUE)
-    servos[SERVO_GRIP].setSlewSteps(25) ' 25 vs. default 75 (full range slew in 25 steps)
+    servos[SERVO_GRIP].setSlewSteps(25)
     term.fstr0(string("** taskInitArmServos() EXIT\r\n\r\n"))
     pca9685.enableDebug(FALSE)
 
@@ -489,7 +492,7 @@ PRI continueSlewingUntilDone(slewDelayInUSec) | bSlewComplete
             waitus(slewDelayInUSec)    ' 25 sorta ok, 10 bad, 20 sorta ok too (too much rocking)
             bSlewComplete := allServosAtTarget()
     while not bSlewComplete
-    term.fstr0(string("** continueSlewingUntilDone() DONE\r\n\r\n"))
+    'term.fstr0(string("** continueSlewingUntilDone() DONE\r\n\r\n"))
 
 
 PRI allServosAtTarget() : bAtTArgetStatus | servoIndex, bDoneStatus
@@ -499,8 +502,8 @@ PRI allServosAtTarget() : bAtTArgetStatus | servoIndex, bDoneStatus
         if not bDoneStatus
             bAtTArgetStatus := FALSE
             quit    ' outta here, we know our answer
-    if bAtTArgetStatus
-        term.fstr0(string("** allServosAtTarget() DONE\r\n"))
+    'if bAtTArgetStatus
+    '    term.fstr0(string("** allServosAtTarget() DONE\r\n"))
     'else
     '    term.fstr0(string("** allServosAtTarget() waiting...\r\n"))
 

@@ -1,16 +1,15 @@
 '' =================================================================================================
 ''
 ''   File....... isp_serial_singleton.spin2
-''               Orignal jm_serial.spin2 made into singleton by Stephen M Moraco
 ''   Purpose.... True mode, unbuffererd serial coms using smart pins
 ''               -- same features as original P1 FDS with minor enhancements/changes
 ''               -- VAR content moved to DAT so we could share this singleton object across all objects in demo
-''   Authors.... (jm_serial.spin2) Eric Smith, Chip Gracey, and Jon McPhalen
-''               (isp_serial_singleton.spin2) adaptation by Stephen M Moraco
+''   Authors.... Eric Smith, Chip Gracey, and Jon McPhalen
+''               (singleton adaptation by Stephen M. Moraco from older file jm_serial.spin2)
 ''               -- see below for terms of use
 ''   E-mail..... stephen@ironsheep.biz
-''   Started.... 28 Jun 2021
-''   Updated.... 14 Aug 2021
+''   Started....
+''   Updated.... 21 May 2021  by Stephen M. Moraco
 ''
 '' =================================================================================================
 
@@ -64,10 +63,9 @@ dat
 rxp  long  0
 txp  long  0
 
-lockID  long    -1
-
 pbuf  byte  0[80]                                                ' padded strings
 
+kLock byte  0
 
 pub null()
 
@@ -294,24 +292,20 @@ pub fstr7(p_str, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
   format(p_str, @arg1)
 
 
-pub format(p_str, p_args) | idx, c, asc, field, digits, lokRslt
+pub format(p_str, p_args) | idx, c, asc, field, digits, kindaLock
 
 '' Emit formatted string with escape sequences and embedded values
 '' -- p_str is a pointer to the format control string
 '' -- p_args is pointer to array of longs that hold field values
 ''    * field values can be numbers, characters, or pointers to strings
 
-    if lockID < 0
-        lockID := LOCKNEW()
-        if lockID < 0
-            return
+    repeat
+        kindaLock := kLock
+        kLock := 1
+        if kindaLock == 1
+            waitms(1)
+    while kindaLock == 1
 
-    if lockID >= 0
-        repeat
-            lokRslt := locktry(lockID)
-            if lokRslt == 0
-                waitms(1)
-        while lokRslt == 0
 
   idx := 0                                                     ' value index
 
@@ -365,8 +359,9 @@ pub format(p_str, p_args) | idx, c, asc, field, digits, lokRslt
     else
       tx(c)
 
-    if lockID >= 0
-        lockrel(lockID)
+    kLock := 0  ' clear our lock
+
+
 
 pri get_nargs(p_str) : p_str1, val1, val2 | c, sign
 
@@ -549,6 +544,41 @@ pub jbin(value, digits, width, pad)
 '' -- pad fills out field
 
   str(nstr.fmt_number(value, 2, digits, width, pad))
+
+pub memDump(pBytes, lenBytes, pMessage) | rowCount, rowLen, pCurrByte, lastRowByteCount, bytesSoFar
+
+'' Dump rows of hex values with address preceeding
+
+    if pMessage
+        fstr1(string("** %s:\r\n"), pMessage)
+
+    rowCount := lenBytes / 16
+    lastRowByteCount := lenBytes - (rowCount * 16)
+    pCurrByte := pBytes
+    bytesSoFar := 0
+
+    ' emit full lines
+    if rowCount > 0
+        repeat rowCount
+            memDumpRow(pCurrByte, 16)
+            pCurrByte += 16
+            bytesSoFar += 16
+
+    if  bytesSoFar < lenBytes
+        ' emit last line
+        memDumpRow(pCurrByte, lastRowByteCount)
+
+pri memDumpRow(pBytes, lenBytes) | rowCount, rowLen, pCurrByte, bytIndex
+    ' emit address
+    fstr1(string("  0x%.8x: "), pBytes)
+    ' emit 8 bytes
+    ' emit gap
+    ' emit 8 bytes
+    repeat bytIndex from 0 to lenBytes - 1
+        fstr1(string("0x%.2x "), BYTE [pBytes][bytIndex])
+        if bytIndex == 7
+            fstr0(string(" "))
+    fstr0(string("\r\n"))
 
 
 con { license }
