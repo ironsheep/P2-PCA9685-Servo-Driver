@@ -409,8 +409,8 @@ PRI strcpy(pDest, pSrc) : lenCopied
     lenCopied := strsize(pSrc)
     bytemove(pDest, pSrc, lenCopied)
 
-PRI reloadSlewRampTable(targetUSec, currUSec) | deltaUSec, bIsIncreasing, absDeltaUSec, eighthUSec, qtrUSec, halfUSec, bigStepCt, smallStepCt, finalStepSize, tableIdx, pTable, tableLen
-    deltaUSec := targetUSec - currUSec
+PRI reloadSlewRampTable(desiredUSec, currUSec) | deltaUSec, bIsIncreasing, absDeltaUSec, eighthUSec, qtrUSec, halfUSec, bigStepCt, smallStepCt, finalStepSize, tableIdx, pTable, tableLen
+    deltaUSec := desiredUSec - currUSec
     bIsIncreasing := deltaUSec >= 0 ? TRUE : FALSE
     absDeltaUSec := abs deltaUSec
     bDoneMsgShown := FALSE
@@ -524,12 +524,12 @@ PRI reloadSlewRampTable(targetUSec, currUSec) | deltaUSec, bIsIncreasing, absDel
     stNextExpire := getct()                 ' set already expired
 
     'term.memDump(@ms001, @stCurrCt - @ms001 + 1, string("ServoSlewTable"))
-    dumpTable(targetUSec, currUSec, deltaUSec)
+    dumpTable(desiredUSec, currUSec, deltaUSec)
     term.fstr0(string("\r\n"))
 
-PRI dumpTable(targetUSec, currUSec, deltaUSec) | tableIndex
+PRI dumpTable(desiredUSec, currUSec, deltaUSec) | tableIndex
     ' dump our table formatted
-    term.fstr5(string("- TABLE [%s] %d entry/ies, from(%d) to(%d) delta(%d)\r\n"), @nameStr, stEntryCt, currUSec, targetUSec, deltaUSec)
+    term.fstr5(string("- TABLE [%s] %d entry/ies, from(%d) to(%d) delta(%d)\r\n"), @nameStr, stEntryCt, currUSec, desiredUSec, deltaUSec)
     repeat tableIndex from 0 to stEntryCt - 1
         term.fstr4(string("- E%d: uS(%d), ct(%d), delay(%d)\r\n"), tableIndex+1, BYTE [@stUSec][tableIndex] signx 7, BYTE [@stCount][tableIndex], WORD [@stDelay][tableIndex])
 
@@ -623,3 +623,31 @@ PRI map(inValue,  inMin,  inMax,  outMin,  outMax) : outValue
     it should do so. Fractional remainders are truncated, and are not rounded or averaged.
 }
   outValue := (inValue - inMin) * (outMax - outMin) / (inMax - inMin) + outMin
+
+CON { license }
+
+{{
+ -------------------------------------------------------------------------------------------------
+  MIT License
+
+  Copyright (c) 2021 Iron Sheep Productions, LLC
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+ =================================================================================================
+}}

@@ -1,13 +1,13 @@
 '' =================================================================================================
 ''
-''   File....... isp_i2c_singleton.spin2
+''   File....... isp_jm_i2c_singleton.spin2
 ''   Purpose.... Low-level I2C routines for the P2
-''   Author..... Stephen M Moraco adapts jm_i2c.spin2 to be a singleton object
-''               Copyright (c) 2021 Stephen M Moraco
+''   Author..... Jon "JonnyMac" McPhalen
+''               Copyright (c) 2020 Jon McPhalen
 ''               -- see below for terms of use
-''   E-mail..... stephen@ironsheep.biz
-''   Started.... 28 Jun 2021
-''   Updated.... 14 Aug 2021
+''   E-mail..... jon.mcphalen@gmail.com
+''   Started....
+''   Updated.... 28 SEP 2020
 ''
 '' =================================================================================================
 
@@ -38,35 +38,46 @@ con
   MAX_LOG_ENTRIES = 30
 
 OBJ
-    term                : "isp_serial_singleton"                 ' terminal output
+    term                : "isp_jm_serial_singleton"                 ' terminal output
+
+{
+VAR
+    ' following 3 LONGs must stay in this position relative to each other!
+  long  sclpin                                                  ' i2c bus pins
+  long  sdapin
+  long  clktix                                                  ' system ticks in 1/4 period
+
+' for debug dumps
+   WORD bytes[MAX_LOG_ENTRIES]
+   WORD count
+'}
 
 DAT
     ' following 3 LONGs must stay in this position relative to each other!
-sclpin        long      0                               ' i2c bus pins
-sdapin        long      0
-clktix        long      0                               ' system ticks in 1/4 period
+    sclpin  long    0                                                  ' i2c bus pins
+    sdapin  long    0
+    clktix  long    0                                                  ' system ticks in 1/4 period
 
-' for debug dumps
-logBytes      WORD      0[MAX_LOG_ENTRIES]
-entryCount    WORD      0
-bShowDebug    BYTE      FALSE
+    ' for debug dumps
+    bytes   WORD    0[MAX_LOG_ENTRIES]
+    count   WORD    0
+    bShowDebug  BYTE    FALSE
 
 pub null()
 
 '' This is not a top-level object
-
 PRI record(mode, value)
     if bShowDebug
-        if entryCount < MAX_LOG_ENTRIES - 1
-            WORD [@logBytes][entryCount] := (mode & $ff) << 8 | (value & $ff)
-            entryCount++
+        if count < MAX_LOG_ENTRIES - 1
+            WORD [@bytes][count] := (mode & $ff) << 8 | (value & $ff)
+            count++
 
 PRI report() | bytIndex, mode, value
     if bShowDebug
-        if entryCount > 0
-            repeat bytIndex from 0 to entryCount - 1
-                mode := WORD [@logBytes][bytIndex] >> 8
-                value := WORD [@logBytes][bytIndex] & $ff
+        if count > 0
+            repeat bytIndex from 0 to count - 1
+                mode := WORD [@bytes][bytIndex] >> 8
+                value := WORD [@bytes][bytIndex] & $ff
                 case mode
                     MK_START:
                         term.fstr0(string("  start()\r\n"))
@@ -82,7 +93,7 @@ PRI report() | bytIndex, mode, value
                         term.fstr1(string("  SDA=%d\r\n"), value)
                     other:
                         term.fstr0(string("  {unknown??}}\r\n"))
-            entryCount := 0
+            count := 0
 
 pub quiesce(pScl, pSda, pullup) | scl, sda
 
@@ -109,7 +120,7 @@ pub quiesce(pScl, pSda, pullup) | scl, sda
 
 pub setup(pScl, pSda, khz, pullup) | scl, sda, tix
 
-  entryCount := 0
+  count := 0
 
 '' Define I2C SCL (clock) and SDA (data) pins
 '' -- khz is bus frequency: 100 (standard), 400 (full), 1000 (fast)
@@ -177,7 +188,6 @@ pub start() | scl, sda, tix
 
 '' Create I2C start sequence
 '' -- will wait if I2C bus SCL pin is held low
-
   scl := sclpin
   sda := sdapin
   tix := clktix
@@ -199,7 +209,6 @@ pub write(i2cbyte) : ackbit | scl, sda, tix
 
 '' Write byte to I2C bus
 '' -- leaves SCL low
-
   'longmove(@scl, @sclpin, 2)
   scl := sclpin
   sda := sdapin
@@ -237,7 +246,6 @@ pub wr_block(p_block, count) : ackbit | i2cbyte, scl, sda, tix
 '' Write count bytes from p_block to I2C bus
 '' -- p_block is pointer to bytes
 '' -- leaves SCL low
-
   'longmove(@scl, @sclpin, 2)
   scl := sclpin
   sda := sdapin
@@ -278,7 +286,6 @@ pub read(ackbit) : i2cbyte | scl, sda, tix
 '' Read byte from I2C bus
 '' -- ackbit is state of ack bit
 ''    * usually NAK for last byte read
-
   'longmove(@scl, @sclpin, 2)
   scl := sclpin
   sda := sdapin
@@ -311,12 +318,11 @@ pub read(ackbit) : i2cbyte | scl, sda, tix
   record(MK_READ, i2cbyte)
 
 
-pub rd_block(p_block, count, ackbit) | i2cbyte, scl, sda, tix
+pub rd_block(p_block, count, ackbit) | i2cbyte
 
 '' Read count bytes from I2C bus
 '' -- p_block is pointer to storage location for bytes
 '' -- ackbit is state of ack for final byte read
-
   'longmove(@scl, @sclpin, 2)
   scl := sclpin
   sda := sdapin
@@ -361,7 +367,6 @@ pub stop() | scl, sda, tix
 
 '' Create I2C stop sequence
 '' -- allows for clock stretch
-
   scl := sclpin
   sda := sdapin
   tix := clktix
@@ -376,13 +381,11 @@ pub stop() | scl, sda, tix
   report()
 
 
-CON { license }
+con { license }
 
 {{
- -------------------------------------------------------------------------------------------------
-  MIT License
 
-  Copyright (c) 2021 Iron Sheep Productions, LLC
+  Terms of Use: MIT License
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -401,5 +404,5 @@ CON { license }
   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
- =================================================================================================
+
 }}

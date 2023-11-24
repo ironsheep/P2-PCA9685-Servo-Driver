@@ -1,17 +1,25 @@
 '' =================================================================================================
 ''
-''   File....... isp_serial_singleton.spin2
+''   File....... isp_jm_serial_singleton.spin2
 ''   Purpose.... True mode, unbuffererd serial coms using smart pins
 ''               -- same features as original P1 FDS with minor enhancements/changes
 ''               -- VAR content moved to DAT so we could share this singleton object across all objects in demo
-''   Authors.... Eric Smith, Chip Gracey, and Jon McPhalen
-''               (singleton adaptation by Stephen M. Moraco from older file jm_serial.spin2)
+''   Authors.... Eric Smith, Chip Gracey, and Jon McPhalen (singleton adaptation by Stephen M. Moraco)
 ''               -- see below for terms of use
 ''   E-mail..... stephen@ironsheep.biz
 ''   Started....
 ''   Updated.... 21 May 2021  by Stephen M. Moraco
 ''
 '' =================================================================================================
+
+{
+
+   Note: The dec(), bin(), and hex() methods will no longer require the digits parameter as
+         in older versions of FullDuplexSerial. Use fdec(), fbin(), and fhex() for code that
+         requires a specific field width.
+
+}
+
 
 con { fixed io pins }
 
@@ -56,7 +64,6 @@ txp  long  0
 
 pbuf  byte  0[80]                                                ' padded strings
 
-kLock byte  0
 
 pub null()
 
@@ -283,20 +290,12 @@ pub fstr7(p_str, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
   format(p_str, @arg1)
 
 
-pub format(p_str, p_args) | idx, c, asc, fieldValue, digits, kindaLock
+pub format(p_str, p_args) | idx, c, asc, field, digits
 
 '' Emit formatted string with escape sequences and embedded values
 '' -- p_str is a pointer to the format control string
 '' -- p_args is pointer to array of longs that hold field values
 ''    * field values can be numbers, characters, or pointers to strings
-
-    repeat
-        kindaLock := kLock
-        kLock := 1
-        if kindaLock == 1
-            waitms(1)
-    while kindaLock == 1
-
 
   idx := 0                                                     ' value index
 
@@ -328,30 +327,27 @@ pub format(p_str, p_args) | idx, c, asc, fieldValue, digits, kindaLock
           tx(asc)
 
     elseif (c == "%")
-      p_str, fieldValue, digits := get_nargs(p_str)
+      p_str, field, digits := get_nargs(p_str)
       c := byte[p_str++]
       if (c == "f")
-        str(nstr.fmt_number(long[p_args][idx++], 99, digits, fieldValue, " "))
+        str(nstr.fmt_number(long[p_args][idx++], 99, digits, field, " "))
       elseif (c == "d")
-        str(nstr.fmt_number(long[p_args][idx++], 10, digits, fieldValue, " "))
+        str(nstr.fmt_number(long[p_args][idx++], 10, digits, field, " "))
       elseif (c == "x")
-        str(nstr.fmt_number(long[p_args][idx++], 16, digits, fieldValue, " "))
+        str(nstr.fmt_number(long[p_args][idx++], 16, digits, field, " "))
       elseif (c == "o")
-        str(nstr.fmt_number(long[p_args][idx++], 08, digits, fieldValue, " "))
+        str(nstr.fmt_number(long[p_args][idx++], 08, digits, field, " "))
       elseif (c == "q")
-        str(nstr.fmt_number(long[p_args][idx++], 04, digits, fieldValue, " "))
+        str(nstr.fmt_number(long[p_args][idx++], 04, digits, field, " "))
       elseif (c == "b")
-        str(nstr.fmt_number(long[p_args][idx++], 02, digits, fieldValue, " "))
+        str(nstr.fmt_number(long[p_args][idx++], 02, digits, field, " "))
       elseif (c == "s")
-        str(nstr.padstr(long[p_args][idx++], fieldValue, " "))
+        str(nstr.padstr(long[p_args][idx++], field, " "))
       elseif (c == "c")
-        txn(long[p_args][idx++], (abs fieldValue) #> 1)
+        txn(long[p_args][idx++], (abs field) #> 1)
 
     else
       tx(c)
-
-    kLock := 0  ' clear our lock
-
 
 
 pri get_nargs(p_str) : p_str1, val1, val2 | c, sign
@@ -407,7 +403,7 @@ pub dec(value)
   str(nstr.itoa(value, 10, 0))
 
 
-pub fwdec(value, digits)
+pub fdec(value, digits)
 
 '' Emit value as decimal using fixed # of digits
 '' -- may add leading zeros
@@ -452,7 +448,7 @@ pub hex(value)
   str(nstr.itoa(value, 16, 0))
 
 
-pub fwhex(value, digits)
+pub fhex(value, digits)
 
 '' Emit value as hexadecimal using fixed # of digits
 
@@ -521,7 +517,7 @@ pub bin(value)
   str(nstr.itoa(value, 2, 0))
 
 
-pub fwbin(value, digits)
+pub fbin(value, digits)
 
 '' Emit value as binary using fixed # of digits
 
@@ -536,66 +532,28 @@ pub jbin(value, digits, width, pad)
 
   str(nstr.fmt_number(value, 2, digits, width, pad))
 
-pub memDump(pBytes, lenBytes, pMessage) | rowCount, rowLen, pCurrByte, lastRowByteCount, bytesSoFar
 
-'' Dump rows of hex values with address preceeding
-
-    if pMessage
-        fstr1(string("** %s:\r\n"), pMessage)
-
-    rowCount := lenBytes / 16
-    lastRowByteCount := lenBytes - (rowCount * 16)
-    pCurrByte := pBytes
-    bytesSoFar := 0
-
-    ' emit full lines
-    if rowCount > 0
-        repeat rowCount
-            memDumpRow(pCurrByte, 16)
-            pCurrByte += 16
-            bytesSoFar += 16
-
-    if  bytesSoFar < lenBytes
-        ' emit last line
-        memDumpRow(pCurrByte, lastRowByteCount)
-
-pri memDumpRow(pBytes, lenBytes) | rowCount, rowLen, pCurrByte, bytIndex
-    ' emit address
-    fstr1(string("  0x%.8x: "), pBytes)
-    ' emit 8 bytes
-    ' emit gap
-    ' emit 8 bytes
-    repeat bytIndex from 0 to lenBytes - 1
-        fstr1(string("0x%.2x "), BYTE [pBytes][bytIndex])
-        if bytIndex == 7
-            fstr0(string(" "))
-    fstr0(string("\r\n"))
-
-
-CON { license }
+con { license }
 
 {{
- -------------------------------------------------------------------------------------------------
-  MIT License
 
-  Copyright (c) 2021 Iron Sheep Productions, LLC
+  Terms of Use: MIT License
 
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files (the "Software"), to deal
-  in the Software without restriction, including without limitation the rights
-  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-  copies of the Software, and to permit persons to whom the Software is
-  furnished to do so, subject to the following conditions:
+  Permission is hereby granted, free of charge, to any person obtaining a copy of this
+  software and associated documentation files (the "Software"), to deal in the Software
+  without restriction, including without limitation the rights to use, copy, modify,
+  merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+  permit persons to whom the Software is furnished to do so, subject to the following
+  conditions:
 
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
+  The above copyright notice and this permission notice shall be included in all copies
+  or substantial portions of the Software.
 
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-  SOFTWARE.
- =================================================================================================
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+  INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+  PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+  HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+  CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+  OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 }}
