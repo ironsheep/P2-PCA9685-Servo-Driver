@@ -151,7 +151,6 @@ All of the arm servos are connected to this pca9685 board and this board itself 
 
 ## License
 
-Copyright © 2021 Iron Sheep Productions, LLC. All rights reserved.<br />
 Licensed under the MIT License. <br>
 <br>
 Follow these links for more information:
